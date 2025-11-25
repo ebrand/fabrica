@@ -1,0 +1,35 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "domain", "domain", "{996CEBED-A05B-5D42-3FF0-982E087A2599}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "admin", "admin", "{361D5524-3FA0-0838-8BDF-5D8E12BA9270}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "acl", "acl", "{C98976D0-40B4-1E44-9B5D-3036C80EBB61}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdminDomainService", "domain\admin\acl\AdminDomainService\AdminDomainService.csproj", "{8E653A1D-AA9E-8AC6-5089-D285701AA6EB}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{8E653A1D-AA9E-8AC6-5089-D285701AA6EB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8E653A1D-AA9E-8AC6-5089-D285701AA6EB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8E653A1D-AA9E-8AC6-5089-D285701AA6EB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8E653A1D-AA9E-8AC6-5089-D285701AA6EB}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{361D5524-3FA0-0838-8BDF-5D8E12BA9270} = {996CEBED-A05B-5D42-3FF0-982E087A2599}
+		{C98976D0-40B4-1E44-9B5D-3036C80EBB61} = {361D5524-3FA0-0838-8BDF-5D8E12BA9270}
+		{8E653A1D-AA9E-8AC6-5089-D285701AA6EB} = {C98976D0-40B4-1E44-9B5D-3036C80EBB61}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {C192D420-4472-48B5-9D7B-9737BD0427A9}
+	EndGlobalSection
+EndGlobal

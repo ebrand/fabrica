@@ -1,0 +1,193 @@
+# Fabrica Commerce Cloud - UX Services
+# Shells, MFEs (Micro-Frontends), and BFFs (Backend-for-Frontend)
+
+services:
+  # Admin BFF - Port 3200 per PORTS.md
+  # .NET Core BFF aggregating data from domain services for Admin Shell/MFE
+  # Note: Configuration is fetched from Vault via acl-admin /api/vault endpoints
+  bff-admin:
+    build:
+      context: ../../ux/bff/AdminBFF
+      dockerfile: Dockerfile
+    container_name: bff-admin
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
+      - ASPNETCORE_URLS=http://+:3200
+      - ADMIN_SERVICE_URL=http://acl-admin:3600
+      # Fallback values if Vault/acl-admin is unavailable
+      - CustomerServiceUrl=http://localhost:3410
+      - ProductServiceUrl=http://localhost:3420
+      - OrderServiceUrl=http://localhost:3430
+    ports:
+      - "3200:3200"
+    networks:
+      - fabrica-network
+    depends_on:
+      acl-admin:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3200/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Common MFE - Port 3099 per PORTS.md
+  # Shared UI components (Select, Combobox, RadioCards, Toast)
+  mfe-common:
+    build:
+      context: ../../ux/mfe/common
+      dockerfile: Dockerfile
+    container_name: mfe-common
+    ports:
+      - "3099:3099"
+    networks:
+      - fabrica-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:3099 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Admin MFE - Port 3100 per PORTS.md
+  # User management micro-frontend
+  mfe-admin:
+    build:
+      context: ../../ux/mfe/admin
+      dockerfile: Dockerfile
+    container_name: mfe-admin
+    environment:
+      - VITE_BFF_URL=http://localhost:3200
+      - VITE_COMMON_MFE_URL=http://localhost:3099
+    ports:
+      - "3100:3100"
+    networks:
+      - fabrica-network
+    depends_on:
+      bff-admin:
+        condition: service_healthy
+      mfe-common:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:3100 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Product BFF - Port 3220 per PORTS.md
+  # Backend-for-Frontend aggregating product data (.NET Core)
+  bff-product:
+    build:
+      context: ../../ux/bff/ProductBFF
+      dockerfile: Dockerfile
+    container_name: bff-product
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
+      - ASPNETCORE_URLS=http://+:3220
+      - PRODUCT_SERVICE_URL=http://acl-product:3420
+    ports:
+      - "3220:3220"
+    networks:
+      - fabrica-network
+    depends_on:
+      acl-product:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3220/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # Product MFE - Port 3110 per PORTS.md
+  # Product catalog management micro-frontend
+  mfe-product:
+    build:
+      context: ../../ux/mfe/product
+      dockerfile: Dockerfile
+    container_name: mfe-product
+    environment:
+      - VITE_ACL_ADMIN_URL=http://localhost:3600
+      - VITE_COMMON_MFE_URL=http://localhost:3099
+    ports:
+      - "3110:3110"
+    networks:
+      - fabrica-network
+    depends_on:
+      bff-product:
+        condition: service_healthy
+      mfe-common:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:3110 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Admin Shell - Port 3001 per PORTS.md
+  # Note: OAuth secrets are fetched from Vault via acl-admin /api/vault endpoints
+  shell-admin:
+    build:
+      context: ../../ux
+      dockerfile: shell/admin/Dockerfile
+    container_name: shell-admin
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - VITE_API_URL=http://localhost:3600
+      - VITE_BFF_URL=http://localhost:3200
+      - VITE_ADMIN_SERVICE_URL=http://acl-admin:3600
+      - VITE_COMMON_MFE_URL=http://localhost:3099
+    ports:
+      - "3001:3001"
+    networks:
+      - fabrica-network
+    depends_on:
+      bff-admin:
+        condition: service_healthy
+      mfe-common:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:3001 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Storefront Shell - Port 3000 (placeholder for future implementation)
+  # shell-storefront:
+  #   build:
+  #     context: ../../ux/shell/storefront-shell
+  #     dockerfile: Dockerfile
+  #   container_name: shell-storefront
+  #   environment:
+  #     - NODE_ENV=${NODE_ENV:-development}
+  #   ports:
+  #     - "3000:3000"
+  #   networks:
+  #     - fabrica-network
+  #   restart: unless-stopped
+
+  # Partner/Merchant Shell - Port 3002 (placeholder for future implementation)
+  # shell-partner:
+  #   build:
+  #     context: ../../ux/shell/partner-shell
+  #     dockerfile: Dockerfile
+  #   container_name: shell-partner
+  #   environment:
+  #     - NODE_ENV=${NODE_ENV:-development}
+  #   ports:
+  #     - "3002:3002"
+  #   networks:
+  #     - fabrica-network
+  #   restart: unless-stopped
+
+# Network is defined in fabrica-compose.yml (used with -f fabrica-compose.yml -f ux-compose.yml)

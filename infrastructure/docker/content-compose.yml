@@ -1,0 +1,135 @@
+# Fabrica Commerce Cloud - Content Domain Services
+# Handles CMS, media, and content management
+
+services:
+  # Content Domain Database Initializer
+  # Creates the fabrica-content-db database with required schemas and tables
+  content-db-init:
+    image: postgres:16-alpine
+    container_name: content-db-init
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER:-fabrica_admin}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-fabrica_dev_password}
+    networks:
+      - fabrica-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../../domain/content/database/init:/docker-entrypoint-initdb.d:ro
+    entrypoint: >
+      sh -c "
+        echo 'Initializing Content domain database...' &&
+        psql -d postgres -c 'CREATE DATABASE \"fabrica-content-db\";' 2>/dev/null || echo 'Database already exists' &&
+        echo 'Creating schemas...' &&
+        psql -d fabrica-content-db -c 'CREATE SCHEMA IF NOT EXISTS fabrica;' &&
+        psql -d fabrica-content-db -c 'CREATE SCHEMA IF NOT EXISTS cdc;' &&
+        psql -d fabrica-content-db -c 'CREATE SCHEMA IF NOT EXISTS cache;' &&
+        echo 'Running initialization scripts...' &&
+        for f in /docker-entrypoint-initdb.d/*.sql; do
+          if [ -f \"$$f\" ]; then
+            echo \"Executing $$f...\" &&
+            psql -d fabrica-content-db -f \"$$f\" || echo \"Failed to execute $$f\"
+          fi
+        done &&
+        echo 'Content database initialized successfully'
+      "
+    restart: "no"
+
+  # Content Domain Service (ACL)
+  # Handles CMS content, media, menus, and translations
+  # Port 3460 per PORTS.md (Content API)
+  acl-content:
+    build:
+      context: ../../domain
+      dockerfile: content/acl/ContentDomainService/Dockerfile
+    container_name: acl-content
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
+      - ASPNETCORE_URLS=http://+:3460
+      - AclAdmin__Url=http://acl-admin:3600
+      # Fallback values if ACL Admin is unavailable
+      - ConnectionStrings__ContentDb=Host=postgres;Port=5432;Database=fabrica-content-db;Username=${POSTGRES_USER:-fabrica_admin};Password=${POSTGRES_PASSWORD:-fabrica_dev_password}
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Port=5672
+      - RabbitMQ__Username=${RABBITMQ_USER:-fabrica_admin}
+      - RabbitMQ__Password=${RABBITMQ_PASSWORD:-fabrica_dev_password}
+      - Redis__ConnectionString=redis:6379
+      - Consul__Host=consul
+      - Consul__Port=8500
+    ports:
+      - "3460:3460"
+    networks:
+      - fabrica-network
+    depends_on:
+      acl-admin:
+        condition: service_healthy
+      content-db-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3460/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Content BFF (Backend-for-Frontend)
+  # Proxies requests to acl-content for the Content MFE
+  # Port 3240 per PORTS.md (Additional capability-based BFFs)
+  bff-content:
+    build:
+      context: ../../ux/bff/ContentBFF
+      dockerfile: Dockerfile
+    container_name: bff-content
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
+      - ASPNETCORE_URLS=http://+:3240
+      - CONTENT_SERVICE_URL=http://acl-content:3460
+    ports:
+      - "3240:3240"
+    networks:
+      - fabrica-network
+    depends_on:
+      acl-content:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3240/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # Content MFE (Micro-Frontend)
+  # Provides ContentBlock component for content rendering
+  # Port 3180 per PORTS.md (MFEs Range)
+  mfe-content:
+    build:
+      context: ../../ux/mfe/content
+      dockerfile: Dockerfile
+    container_name: mfe-content
+    ports:
+      - "3180:3180"
+    networks:
+      - fabrica-network
+    depends_on:
+      bff-content:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3180/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+# Network is inherited from the master fabrica-compose.yml file

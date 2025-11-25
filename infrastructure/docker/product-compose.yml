@@ -1,0 +1,137 @@
+# Fabrica Commerce Cloud - Product Domain Services
+# Handles product catalog, pricing, and inventory
+
+services:
+  # Product Domain Database Initializer
+  # Creates the fabrica-product-db database with required schemas
+  product-db-init:
+    image: postgres:16-alpine
+    container_name: product-db-init
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER:-fabrica_admin}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-fabrica_dev_password}
+    networks:
+      - fabrica-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../../domain/product/database/init:/docker-entrypoint-initdb.d:ro
+    entrypoint: >
+      sh -c "
+        echo 'Initializing Product domain database...' &&
+        psql -d postgres -c 'CREATE DATABASE \"fabrica-product-db\";' 2>/dev/null || echo 'Database already exists' &&
+        echo 'Creating schemas...' &&
+        psql -d fabrica-product-db -c 'CREATE SCHEMA IF NOT EXISTS fabrica;' &&
+        psql -d fabrica-product-db -c 'CREATE SCHEMA IF NOT EXISTS cdc;' &&
+        echo 'Running initialization scripts...' &&
+        for f in /docker-entrypoint-initdb.d/*.sql; do
+          if [ -f \"$$f\" ]; then
+            echo \"Executing $$f...\" &&
+            psql -d fabrica-product-db -f \"$$f\" || echo \"Failed to execute $$f\"
+          fi
+        done &&
+        echo 'Product database initialized successfully'
+      "
+    restart: "no"
+
+  # Product Domain Service (ACL)
+  # Handles product catalog, categories, and inventory management
+  # Port 3420 per PORTS.md (Product API)
+  # Note: Configuration is fetched directly from Vault at startup
+  acl-product:
+    build:
+      context: ../../domain
+      dockerfile: product/acl/ProductDomainService/Dockerfile
+    container_name: acl-product
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
+      - ASPNETCORE_URLS=http://+:3420
+      - AclAdmin__Url=http://acl-admin:3600
+      # Fallback values if ACL Admin is unavailable
+      - ConnectionStrings__ProductDb=Host=postgres;Port=5432;Database=fabrica-product-db;Username=${POSTGRES_USER:-fabrica_admin};Password=${POSTGRES_PASSWORD:-fabrica_dev_password}
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Port=5672
+      - RabbitMQ__Username=${RABBITMQ_USER:-fabrica_admin}
+      - RabbitMQ__Password=${RABBITMQ_PASSWORD:-fabrica_dev_password}
+      - Redis__ConnectionString=redis:6379
+      - Consul__Host=consul
+      - Consul__Port=8500
+    ports:
+      - "3420:3420"
+    networks:
+      - fabrica-network
+    depends_on:
+      acl-admin:
+        condition: service_healthy
+      product-db-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3420/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Product ESB Consumer Service
+  esb-product-consumer:
+    build:
+      context: ../../domain/product/esb/ProductConsumerService
+      dockerfile: Dockerfile
+    container_name: esb-product-consumer
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-fabrica_admin}:${POSTGRES_PASSWORD:-fabrica_dev_password}@postgres:5432/fabrica-product-db
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-fabrica_admin}:${RABBITMQ_PASSWORD:-fabrica_dev_password}@rabbitmq:5672
+      - CONSUL_HOST=consul
+      - CONSUL_PORT=8500
+    networks:
+      - fabrica-network
+    depends_on:
+      product-db-init:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    volumes:
+      - ../../domain/product/esb/ProductConsumerService:/app
+      - /app/node_modules
+    restart: unless-stopped
+
+  # Product ESB Producer Service
+  esb-product-producer:
+    build:
+      context: ../../domain/product/esb/ProductProducerService
+      dockerfile: Dockerfile
+    container_name: esb-product-producer
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-fabrica_admin}:${POSTGRES_PASSWORD:-fabrica_dev_password}@postgres:5432/fabrica-product-db
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-fabrica_admin}:${RABBITMQ_PASSWORD:-fabrica_dev_password}@rabbitmq:5672
+      - CONSUL_HOST=consul
+      - CONSUL_PORT=8500
+    networks:
+      - fabrica-network
+    depends_on:
+      product-db-init:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    volumes:
+      - ../../domain/product/esb/ProductProducerService:/app
+      - /app/node_modules
+    restart: unless-stopped
+
+# Network is inherited from the master fabrica-compose.yml file

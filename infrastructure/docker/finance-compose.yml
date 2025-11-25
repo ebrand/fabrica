@@ -1,0 +1,50 @@
+# Fabrica Commerce Cloud - Finance Domain Services
+# Handles payments, billing, invoicing, and financial transactions
+
+services:
+  # Finance Domain Database Initializer
+  finance-db-init:
+    image: postgres:16-alpine
+    container_name: finance-db-init
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER:-fabrica_admin}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-fabrica_dev_password}
+    networks:
+      - fabrica-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: >
+      sh -c "
+        echo 'Initializing Finance domain database...' &&
+        psql -c 'CREATE DATABASE \"fabrica-finance-db\";' || echo 'Database already exists' &&
+        psql -d fabrica-finance-db -c 'CREATE SCHEMA IF NOT EXISTS fabrica;' &&
+        psql -d fabrica-finance-db -c 'CREATE SCHEMA IF NOT EXISTS cdc;' &&
+        echo 'Finance database initialized successfully'
+      "
+    restart: "no"
+
+  # Placeholder for Finance Domain Service (ACL)
+  # Port 3440 per PORTS.md (Payment Orchestration)
+  # Uncomment and configure when ready to implement
+  # acl-finance:
+  #   build:
+  #     context: ../../domain/finance/acl/FinanceDomainService
+  #     dockerfile: Dockerfile
+  #   container_name: acl-finance
+  #   environment:
+  #     - NODE_ENV=${NODE_ENV:-development}
+  #     - PORT=3440
+  #     - DATABASE_URL=postgresql://${POSTGRES_USER:-fabrica_admin}:${POSTGRES_PASSWORD:-fabrica_dev_password}@postgres:5432/fabrica-finance-db
+  #   ports:
+  #     - "3440:3440"
+  #   networks:
+  #     - fabrica-network
+  #   depends_on:
+  #     finance-db-init:
+  #       condition: service_completed_successfully
+  #   restart: unless-stopped
+
+# Network is inherited from the master fabrica-compose.yml file

@@ -1,0 +1,121 @@
+# Fabrica Commerce Cloud - Order Management Domain Services
+# Handles order processing, fulfillment, and shipping
+
+services:
+  # Order Management Domain Database Initializer
+  order-mgmt-db-init:
+    image: postgres:16-alpine
+    container_name: order-mgmt-db-init
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER:-fabrica_admin}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-fabrica_dev_password}
+    networks:
+      - fabrica-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../../domain/order-mgmt/database/init:/docker-entrypoint-initdb.d:ro
+    entrypoint: >
+      sh -c "
+        echo 'Initializing Order Management domain database...' &&
+        psql -c 'CREATE DATABASE \"fabrica-order-mgmt-db\";' || echo 'Database already exists' &&
+        psql -d fabrica-order-mgmt-db -c 'CREATE SCHEMA IF NOT EXISTS fabrica;' &&
+        psql -d fabrica-order-mgmt-db -c 'CREATE SCHEMA IF NOT EXISTS cdc;' &&
+        echo 'Order Management database initialized successfully'
+      "
+    restart: "no"
+
+  # Order Management Domain Service (ACL)
+  # Port 3430 per PORTS.md (Orders API)
+  acl-order-mgmt:
+    build:
+      context: ../../domain/order-mgmt/acl/OrderMgmtDomainService
+      dockerfile: Dockerfile
+    container_name: acl-order-mgmt
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=3430
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-fabrica_admin}:${POSTGRES_PASSWORD:-fabrica_dev_password}@postgres:5432/fabrica-order-mgmt-db
+      - REDIS_URL=redis://redis:6379
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-fabrica_admin}:${RABBITMQ_PASSWORD:-fabrica_dev_password}@rabbitmq:5672
+      - CONSUL_HOST=consul
+      - CONSUL_PORT=8500
+    ports:
+      - "3430:3430"
+    networks:
+      - fabrica-network
+    depends_on:
+      order-mgmt-db-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    volumes:
+      - ../../domain/order-mgmt/acl/OrderMgmtDomainService:/app
+      - /app/node_modules
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3430/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Order Management ESB Consumer Service
+  esb-order-mgmt-consumer:
+    build:
+      context: ../../domain/order-mgmt/esb/OrderMgmtConsumerService
+      dockerfile: Dockerfile
+    container_name: esb-order-mgmt-consumer
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-fabrica_admin}:${POSTGRES_PASSWORD:-fabrica_dev_password}@postgres:5432/fabrica-order-mgmt-db
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-fabrica_admin}:${RABBITMQ_PASSWORD:-fabrica_dev_password}@rabbitmq:5672
+      - CONSUL_HOST=consul
+      - CONSUL_PORT=8500
+    networks:
+      - fabrica-network
+    depends_on:
+      order-mgmt-db-init:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    volumes:
+      - ../../domain/order-mgmt/esb/OrderMgmtConsumerService:/app
+      - /app/node_modules
+    restart: unless-stopped
+
+  # Order Management ESB Producer Service
+  esb-order-mgmt-producer:
+    build:
+      context: ../../domain/order-mgmt/esb/OrderMgmtProducerService
+      dockerfile: Dockerfile
+    container_name: esb-order-mgmt-producer
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-fabrica_admin}:${POSTGRES_PASSWORD:-fabrica_dev_password}@postgres:5432/fabrica-order-mgmt-db
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-fabrica_admin}:${RABBITMQ_PASSWORD:-fabrica_dev_password}@rabbitmq:5672
+      - CONSUL_HOST=consul
+      - CONSUL_PORT=8500
+    networks:
+      - fabrica-network
+    depends_on:
+      order-mgmt-db-init:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    volumes:
+      - ../../domain/order-mgmt/esb/OrderMgmtProducerService:/app
+      - /app/node_modules
+    restart: unless-stopped
+
+# Network is inherited from the master fabrica-compose.yml file

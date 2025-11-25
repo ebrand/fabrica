@@ -1,0 +1,49 @@
+# Fabrica Commerce Cloud - Sales & Marketing Domain Services
+# Handles campaigns, promotions, analytics, and customer engagement
+
+services:
+  # Sales & Marketing Domain Database Initializer
+  sales-mktg-db-init:
+    image: postgres:16-alpine
+    container_name: sales-mktg-db-init
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER:-fabrica_admin}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-fabrica_dev_password}
+    networks:
+      - fabrica-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: >
+      sh -c "
+        echo 'Initializing Sales & Marketing domain database...' &&
+        psql -c 'CREATE DATABASE \"fabrica-sales-mktg-db\";' || echo 'Database already exists' &&
+        psql -d fabrica-sales-mktg-db -c 'CREATE SCHEMA IF NOT EXISTS fabrica;' &&
+        psql -d fabrica-sales-mktg-db -c 'CREATE SCHEMA IF NOT EXISTS cdc;' &&
+        echo 'Sales & Marketing database initialized successfully'
+      "
+    restart: "no"
+
+  # Placeholder for Sales & Marketing Domain Service (ACL)
+  # Uncomment and configure when ready to implement
+  # acl-sales-mktg:
+  #   build:
+  #     context: ../../domain/sales-mktg/acl/SalesMktgDomainService
+  #     dockerfile: Dockerfile
+  #   container_name: acl-sales-mktg
+  #   environment:
+  #     - NODE_ENV=${NODE_ENV:-development}
+  #     - PORT=3480
+  #     - DATABASE_URL=postgresql://${POSTGRES_USER:-fabrica_admin}:${POSTGRES_PASSWORD:-fabrica_dev_password}@postgres:5432/fabrica-sales-mktg-db
+  #   ports:
+  #     - "3480:3480"
+  #   networks:
+  #     - fabrica-network
+  #   depends_on:
+  #     sales-mktg-db-init:
+  #       condition: service_completed_successfully
+  #   restart: unless-stopped
+
+# Network is inherited from the master fabrica-compose.yml file

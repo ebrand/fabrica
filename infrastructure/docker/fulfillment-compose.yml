@@ -1,0 +1,50 @@
+# Fabrica Commerce Cloud - Fulfillment Domain Services
+# Handles shipping, logistics, and order fulfillment
+
+services:
+  # Fulfillment Domain Database Initializer
+  fulfillment-db-init:
+    image: postgres:16-alpine
+    container_name: fulfillment-db-init
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER:-fabrica_admin}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-fabrica_dev_password}
+    networks:
+      - fabrica-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: >
+      sh -c "
+        echo 'Initializing Fulfillment domain database...' &&
+        psql -c 'CREATE DATABASE \"fabrica-fulfillment-db\";' || echo 'Database already exists' &&
+        psql -d fabrica-fulfillment-db -c 'CREATE SCHEMA IF NOT EXISTS fabrica;' &&
+        psql -d fabrica-fulfillment-db -c 'CREATE SCHEMA IF NOT EXISTS cdc;' &&
+        echo 'Fulfillment database initialized successfully'
+      "
+    restart: "no"
+
+  # Placeholder for Fulfillment Domain Service (ACL)
+  # Port 3431 per PORTS.md (Fulfillment/Shipping)
+  # Uncomment and configure when ready to implement
+  # acl-fulfillment:
+  #   build:
+  #     context: ../../domain/fulfillment/acl/FulfillmentDomainService
+  #     dockerfile: Dockerfile
+  #   container_name: acl-fulfillment
+  #   environment:
+  #     - NODE_ENV=${NODE_ENV:-development}
+  #     - PORT=3431
+  #     - DATABASE_URL=postgresql://${POSTGRES_USER:-fabrica_admin}:${POSTGRES_PASSWORD:-fabrica_dev_password}@postgres:5432/fabrica-fulfillment-db
+  #   ports:
+  #     - "3431:3431"
+  #   networks:
+  #     - fabrica-network
+  #   depends_on:
+  #     fulfillment-db-init:
+  #       condition: service_completed_successfully
+  #   restart: unless-stopped
+
+# Network is inherited from the master fabrica-compose.yml file

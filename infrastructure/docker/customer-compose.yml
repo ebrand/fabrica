@@ -1,0 +1,121 @@
+# Fabrica Commerce Cloud - Customer Domain Services
+# Handles customer accounts, profiles, and related functionality
+
+services:
+  # Customer Domain Database Initializer
+  customer-db-init:
+    image: postgres:16-alpine
+    container_name: customer-db-init
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER:-fabrica_admin}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-fabrica_dev_password}
+    networks:
+      - fabrica-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../../domain/customer/database/init:/docker-entrypoint-initdb.d:ro
+    entrypoint: >
+      sh -c "
+        echo 'Initializing Customer domain database...' &&
+        psql -c 'CREATE DATABASE \"fabrica-customer-db\";' || echo 'Database already exists' &&
+        psql -d fabrica-customer-db -c 'CREATE SCHEMA IF NOT EXISTS fabrica;' &&
+        psql -d fabrica-customer-db -c 'CREATE SCHEMA IF NOT EXISTS cdc;' &&
+        echo 'Customer database initialized successfully'
+      "
+    restart: "no"
+
+  # Customer Domain Service (ACL)
+  # Port 3410 per PORTS.md (Customer API)
+  acl-customer:
+    build:
+      context: ../../domain/customer/acl/CustomerDomainService
+      dockerfile: Dockerfile
+    container_name: acl-customer
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=3410
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-fabrica_admin}:${POSTGRES_PASSWORD:-fabrica_dev_password}@postgres:5432/fabrica-customer-db
+      - REDIS_URL=redis://redis:6379
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-fabrica_admin}:${RABBITMQ_PASSWORD:-fabrica_dev_password}@rabbitmq:5672
+      - CONSUL_HOST=consul
+      - CONSUL_PORT=8500
+    ports:
+      - "3410:3410"
+    networks:
+      - fabrica-network
+    depends_on:
+      customer-db-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    volumes:
+      - ../../domain/customer/acl/CustomerDomainService:/app
+      - /app/node_modules
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3410/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Customer ESB Consumer Service
+  esb-customer-consumer:
+    build:
+      context: ../../domain/customer/esb/CustomerConsumerService
+      dockerfile: Dockerfile
+    container_name: esb-customer-consumer
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-fabrica_admin}:${POSTGRES_PASSWORD:-fabrica_dev_password}@postgres:5432/fabrica-customer-db
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-fabrica_admin}:${RABBITMQ_PASSWORD:-fabrica_dev_password}@rabbitmq:5672
+      - CONSUL_HOST=consul
+      - CONSUL_PORT=8500
+    networks:
+      - fabrica-network
+    depends_on:
+      customer-db-init:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    volumes:
+      - ../../domain/customer/esb/CustomerConsumerService:/app
+      - /app/node_modules
+    restart: unless-stopped
+
+  # Customer ESB Producer Service
+  esb-customer-producer:
+    build:
+      context: ../../domain/customer/esb/CustomerProducerService
+      dockerfile: Dockerfile
+    container_name: esb-customer-producer
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-fabrica_admin}:${POSTGRES_PASSWORD:-fabrica_dev_password}@postgres:5432/fabrica-customer-db
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-fabrica_admin}:${RABBITMQ_PASSWORD:-fabrica_dev_password}@rabbitmq:5672
+      - CONSUL_HOST=consul
+      - CONSUL_PORT=8500
+    networks:
+      - fabrica-network
+    depends_on:
+      customer-db-init:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    volumes:
+      - ../../domain/customer/esb/CustomerProducerService:/app
+      - /app/node_modules
+    restart: unless-stopped
+
+# Network is inherited from the master fabrica-compose.yml file

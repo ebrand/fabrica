@@ -1,0 +1,141 @@
+# Fabrica Commerce Cloud - Admin Domain Services
+# Handles authentication, authorization, RBAC, and administrative functions
+
+services:
+  # Admin Domain Database Initializer
+  # Creates the fabrica-admin-db database with required schemas
+  admin-db-init:
+    image: postgres:16-alpine
+    container_name: admin-db-init
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER:-fabrica_admin}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-fabrica_dev_password}
+    networks:
+      - fabrica-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../../domain/admin/database/init:/docker-entrypoint-initdb.d:ro
+    entrypoint: >
+      sh -c "
+        echo 'Initializing Admin domain database...' &&
+        psql -d postgres -c 'CREATE DATABASE \"fabrica-admin-db\";' 2>/dev/null || echo 'Database already exists' &&
+        echo 'Creating schemas...' &&
+        psql -d fabrica-admin-db -c 'CREATE SCHEMA IF NOT EXISTS fabrica;' &&
+        psql -d fabrica-admin-db -c 'CREATE SCHEMA IF NOT EXISTS cdc;' &&
+        echo 'Running initialization scripts...' &&
+        for f in /docker-entrypoint-initdb.d/*.sql; do
+          if [ -f \"$$f\" ]; then
+            echo \"Executing $$f...\" &&
+            psql -d fabrica-admin-db -f \"$$f\" || echo \"Failed to execute $$f\"
+          fi
+        done &&
+        echo 'Admin database initialized successfully'
+      "
+    restart: "no"
+
+  # Admin Domain Service (ACL/Auth/IAM + ESB Producer/Consumer)
+  # Handles authentication, authorization, RBAC, and event bus operations
+  # Port 3600 per PORTS.md (Auth / IAM)
+  # Note: Configuration is fetched directly from Vault at startup
+  acl-admin:
+    build:
+      context: ../../domain
+      dockerfile: admin/acl/AdminDomainService/Dockerfile
+    container_name: acl-admin
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
+      - ASPNETCORE_URLS=http://+:3600
+      - Vault__Address=http://vault:8200
+      - Vault__Token=${VAULT_ROOT_TOKEN:-fabrica_dev_root_token}
+      # Fallback values if Vault is unavailable
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=fabrica-admin-db;Username=${POSTGRES_USER:-fabrica_admin};Password=${POSTGRES_PASSWORD:-fabrica_dev_password}
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Port=5672
+      - RabbitMQ__Username=${RABBITMQ_USER:-fabrica_admin}
+      - RabbitMQ__Password=${RABBITMQ_PASSWORD:-fabrica_dev_password}
+      - Redis__ConnectionString=redis:6379
+      - Consul__Host=consul
+      - Consul__Port=8500
+    ports:
+      - "3600:3600"
+    networks:
+      - fabrica-network
+    depends_on:
+      vault:
+        condition: service_healthy
+      admin-db-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3600/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Admin ESB Consumer Service
+  # Consumes events from the ESB for the Admin domain
+  esb-admin-consumer:
+    build:
+      context: ../../domain/admin/esb/AdminConsumerService
+      dockerfile: Dockerfile
+    container_name: esb-admin-consumer
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-fabrica_admin}:${POSTGRES_PASSWORD:-fabrica_dev_password}@postgres:5432/fabrica-admin-db
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-fabrica_admin}:${RABBITMQ_PASSWORD:-fabrica_dev_password}@rabbitmq:5672
+      - CONSUL_HOST=consul
+      - CONSUL_PORT=8500
+    networks:
+      - fabrica-network
+    depends_on:
+      admin-db-init:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    volumes:
+      - ../../domain/admin/esb/AdminConsumerService:/app
+      - /app/node_modules
+    restart: unless-stopped
+
+  # Admin ESB Producer Service
+  # Publishes events from the Admin domain to the ESB
+  # Monitors the cdc.outbox table and publishes events
+  esb-admin-producer:
+    build:
+      context: ../../domain/admin/esb/AdminProducerService
+      dockerfile: Dockerfile
+    container_name: esb-admin-producer
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-fabrica_admin}:${POSTGRES_PASSWORD:-fabrica_dev_password}@postgres:5432/fabrica-admin-db
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-fabrica_admin}:${RABBITMQ_PASSWORD:-fabrica_dev_password}@rabbitmq:5672
+      - CONSUL_HOST=consul
+      - CONSUL_PORT=8500
+    networks:
+      - fabrica-network
+    depends_on:
+      admin-db-init:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    volumes:
+      - ../../domain/admin/esb/AdminProducerService:/app
+      - /app/node_modules
+    restart: unless-stopped
+
+# Network is inherited from the master fabrica-compose.yml file

@@ -1,0 +1,2 @@
+/* MFE inherits all Tailwind styles from the shell application */
+/* Do NOT import Tailwind here - it causes CSS conflicts with the shell */

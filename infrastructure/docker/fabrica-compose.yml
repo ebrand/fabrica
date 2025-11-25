@@ -1,0 +1,49 @@
+# Fabrica Commerce Cloud - Master Docker Compose File
+# This file orchestrates all infrastructure and domain services
+
+# Explicitly set the project name to 'fabrica'
+# This groups all containers under the 'fabrica' project
+name: fabrica
+
+# Define the custom network for all Fabrica services
+networks:
+  fabrica-network:
+    driver: bridge
+
+# Include all component compose files
+include:
+  # Shared infrastructure services (databases, messaging, service mesh, etc.)
+  - path: ./infrastructure-compose.yml
+    env_file: ./.env
+
+  # UX services (Shells, MFEs, BFFs)
+  - path: ./ux-compose.yml
+    env_file: ./.env
+
+  # Domain-specific services
+  - path: ./admin-compose.yml
+    env_file: ./.env
+
+  - path: ./customer-compose.yml
+    env_file: ./.env
+
+  - path: ./content-compose.yml
+    env_file: ./.env
+
+  - path: ./finance-compose.yml
+    env_file: ./.env
+
+  - path: ./fulfillment-compose.yml
+    env_file: ./.env
+
+  - path: ./legal-compose.yml
+    env_file: ./.env
+
+  - path: ./order-mgmt-compose.yml
+    env_file: ./.env
+
+  - path: ./product-compose.yml
+    env_file: ./.env
+
+  - path: ./sales-mktg-compose.yml
+    env_file: ./.env

@@ -1,0 +1,15 @@
+{
+  "name": "fabrica-script-runner",
+  "version": "1.0.0",
+  "description": "Local service for executing Fabrica scripts from the admin UI",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "cors": "^2.8.5"
+  }
+}
