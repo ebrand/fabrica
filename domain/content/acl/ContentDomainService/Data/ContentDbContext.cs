@@ -12,28 +12,29 @@ public class ContentDbContext : DbContext
     {
     }
 
-    // Core content entities
+    // Core entities
     public DbSet<Language> Languages { get; set; }
-    public DbSet<ContentType> ContentTypes { get; set; }
-    public DbSet<Content> Contents { get; set; }
-    public DbSet<ContentTranslation> ContentTranslations { get; set; }
 
-    // Categories and tags
-    public DbSet<ContentCategory> ContentCategories { get; set; }
-    public DbSet<ContentCategoryTranslation> ContentCategoryTranslations { get; set; }
-    public DbSet<ContentCategoryMapping> ContentCategoryMappings { get; set; }
-    public DbSet<ContentTag> ContentTags { get; set; }
-    public DbSet<ContentTagTranslation> ContentTagTranslations { get; set; }
-    public DbSet<ContentTagMapping> ContentTagMappings { get; set; }
+    // Block Structure (Schema-driven Content Blocks)
+    public DbSet<Block> Blocks { get; set; }
+    public DbSet<SectionType> SectionTypes { get; set; }
+    public DbSet<BlockSection> BlockSections { get; set; }
+    public DbSet<Variant> Variants { get; set; }
+    public DbSet<BlockContent> BlockContents { get; set; }
+    public DbSet<BlockContentSectionTranslation> BlockContentSectionTranslations { get; set; }
+
+    // Block Categories and Tags
+    public DbSet<BlockCategory> BlockCategories { get; set; }
+    public DbSet<BlockCategoryTranslation> BlockCategoryTranslations { get; set; }
+    public DbSet<BlockContentCategory> BlockContentCategories { get; set; }
+    public DbSet<BlockTag> BlockTags { get; set; }
+    public DbSet<BlockTagTranslation> BlockTagTranslations { get; set; }
+    public DbSet<BlockContentTag> BlockContentTags { get; set; }
 
     // Media
     public DbSet<MediaFolder> MediaFolders { get; set; }
     public DbSet<Media> MediaItems { get; set; }
     public DbSet<MediaTranslation> MediaTranslations { get; set; }
-
-    // Content Blocks
-    public DbSet<ContentBlock> ContentBlocks { get; set; }
-    public DbSet<ContentBlockTranslation> ContentBlockTranslations { get; set; }
 
     // Menus
     public DbSet<Menu> Menus { get; set; }
@@ -62,48 +63,94 @@ public class ContentDbContext : DbContext
             entity.HasIndex(e => new { e.TenantId, e.LocaleCode }).IsUnique();
         });
 
-        // ContentType configuration
-        modelBuilder.Entity<ContentType>(entity =>
+        // Block configuration
+        modelBuilder.Entity<Block>(entity =>
         {
-            entity.HasIndex(e => new { e.TenantId, e.Code }).IsUnique();
-            entity.HasMany(ct => ct.Contents)
-                .WithOne(c => c.ContentType)
-                .HasForeignKey(c => c.ContentTypeId)
+            entity.HasIndex(e => new { e.TenantId, e.Slug }).IsUnique();
+
+            entity.HasMany(b => b.BlockSections)
+                .WithOne(bs => bs.Block)
+                .HasForeignKey(bs => bs.BlockId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(b => b.Variants)
+                .WithOne(v => v.Block)
+                .HasForeignKey(v => v.BlockId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(b => b.BlockContents)
+                .WithOne(bc => bc.Block)
+                .HasForeignKey(bc => bc.BlockId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
-        // Content configuration
-        modelBuilder.Entity<Content>(entity =>
+        // SectionType configuration
+        modelBuilder.Entity<SectionType>(entity =>
         {
             entity.HasIndex(e => new { e.TenantId, e.Slug }).IsUnique();
-            entity.HasIndex(e => e.ContentTypeId);
-            entity.HasIndex(e => e.Status);
-            entity.HasIndex(e => e.ParentId);
 
-            entity.HasOne(c => c.Parent)
-                .WithMany(c => c.Children)
-                .HasForeignKey(c => c.ParentId)
-                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasMany(st => st.BlockSections)
+                .WithOne(bs => bs.SectionType)
+                .HasForeignKey(bs => bs.SectionTypeId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
 
-            entity.HasMany(c => c.Translations)
-                .WithOne(t => t.Content)
+        // BlockSection configuration (composite key)
+        modelBuilder.Entity<BlockSection>(entity =>
+        {
+            entity.HasKey(e => new { e.BlockId, e.SectionTypeId });
+        });
+
+        // Variant configuration
+        modelBuilder.Entity<Variant>(entity =>
+        {
+            entity.HasIndex(e => new { e.BlockId, e.Slug }).IsUnique();
+        });
+
+        // BlockContent configuration
+        modelBuilder.Entity<BlockContent>(entity =>
+        {
+            entity.HasIndex(e => new { e.TenantId, e.Slug }).IsUnique();
+
+            entity.HasOne(bc => bc.DefaultVariant)
+                .WithMany(v => v.BlockContents)
+                .HasForeignKey(bc => bc.DefaultVariantId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasMany(bc => bc.SectionTranslations)
+                .WithOne(t => t.BlockContent)
                 .HasForeignKey(t => t.ContentId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasOne(c => c.FeaturedImage)
-                .WithMany()
-                .HasForeignKey(c => c.FeaturedImageId)
-                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasMany(bc => bc.CategoryMappings)
+                .WithOne(m => m.Content)
+                .HasForeignKey(m => m.ContentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(bc => bc.TagMappings)
+                .WithOne(m => m.Content)
+                .HasForeignKey(m => m.ContentId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // ContentTranslation configuration
-        modelBuilder.Entity<ContentTranslation>(entity =>
+        // BlockContentSectionTranslation configuration
+        modelBuilder.Entity<BlockContentSectionTranslation>(entity =>
         {
-            entity.HasIndex(e => new { e.ContentId, e.LocaleCode }).IsUnique();
+            entity.HasIndex(e => new { e.ContentId, e.SectionTypeId, e.LanguageId }).IsUnique();
+
+            entity.HasOne(t => t.SectionType)
+                .WithMany(st => st.Translations)
+                .HasForeignKey(t => t.SectionTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(t => t.Language)
+                .WithMany()
+                .HasForeignKey(t => t.LanguageId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
-        // ContentCategory configuration
-        modelBuilder.Entity<ContentCategory>(entity =>
+        // BlockCategory configuration
+        modelBuilder.Entity<BlockCategory>(entity =>
         {
             entity.HasIndex(e => new { e.TenantId, e.Slug }).IsUnique();
 
@@ -113,64 +160,64 @@ public class ContentDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasMany(c => c.Translations)
-                .WithOne(t => t.ContentCategory)
-                .HasForeignKey(t => t.ContentCategoryId)
+                .WithOne(t => t.Category)
+                .HasForeignKey(t => t.CategoryId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(c => c.ContentMappings)
+                .WithOne(m => m.Category)
+                .HasForeignKey(m => m.CategoryId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // ContentCategoryTranslation configuration
-        modelBuilder.Entity<ContentCategoryTranslation>(entity =>
+        // BlockCategoryTranslation configuration
+        modelBuilder.Entity<BlockCategoryTranslation>(entity =>
         {
-            entity.HasIndex(e => new { e.ContentCategoryId, e.LocaleCode }).IsUnique();
+            entity.HasIndex(e => new { e.CategoryId, e.LanguageId }).IsUnique();
+
+            entity.HasOne(t => t.Language)
+                .WithMany()
+                .HasForeignKey(t => t.LanguageId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
-        // ContentCategoryMapping configuration (composite key)
-        modelBuilder.Entity<ContentCategoryMapping>(entity =>
+        // BlockContentCategory configuration (composite key)
+        modelBuilder.Entity<BlockContentCategory>(entity =>
         {
-            entity.HasKey(e => new { e.ContentId, e.ContentCategoryId });
-
-            entity.HasOne(m => m.Content)
-                .WithMany(c => c.CategoryMappings)
-                .HasForeignKey(m => m.ContentId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(m => m.ContentCategory)
-                .WithMany(c => c.ContentMappings)
-                .HasForeignKey(m => m.ContentCategoryId)
-                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasKey(e => new { e.ContentId, e.CategoryId });
         });
 
-        // ContentTag configuration
-        modelBuilder.Entity<ContentTag>(entity =>
+        // BlockTag configuration
+        modelBuilder.Entity<BlockTag>(entity =>
         {
             entity.HasIndex(e => new { e.TenantId, e.Slug }).IsUnique();
 
             entity.HasMany(t => t.Translations)
-                .WithOne(tt => tt.ContentTag)
-                .HasForeignKey(tt => tt.ContentTagId)
+                .WithOne(tt => tt.Tag)
+                .HasForeignKey(tt => tt.TagId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(t => t.ContentMappings)
+                .WithOne(m => m.Tag)
+                .HasForeignKey(m => m.TagId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // ContentTagTranslation configuration
-        modelBuilder.Entity<ContentTagTranslation>(entity =>
+        // BlockTagTranslation configuration
+        modelBuilder.Entity<BlockTagTranslation>(entity =>
         {
-            entity.HasIndex(e => new { e.ContentTagId, e.LocaleCode }).IsUnique();
+            entity.HasIndex(e => new { e.TagId, e.LanguageId }).IsUnique();
+
+            entity.HasOne(t => t.Language)
+                .WithMany()
+                .HasForeignKey(t => t.LanguageId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
-        // ContentTagMapping configuration (composite key)
-        modelBuilder.Entity<ContentTagMapping>(entity =>
+        // BlockContentTag configuration (composite key)
+        modelBuilder.Entity<BlockContentTag>(entity =>
         {
-            entity.HasKey(e => new { e.ContentId, e.ContentTagId });
-
-            entity.HasOne(m => m.Content)
-                .WithMany(c => c.TagMappings)
-                .HasForeignKey(m => m.ContentId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(m => m.ContentTag)
-                .WithMany(t => t.ContentMappings)
-                .HasForeignKey(m => m.ContentTagId)
-                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasKey(e => new { e.ContentId, e.TagId });
         });
 
         // MediaFolder configuration
@@ -208,23 +255,6 @@ public class ContentDbContext : DbContext
             entity.HasIndex(e => new { e.MediaId, e.LocaleCode }).IsUnique();
         });
 
-        // ContentBlock configuration
-        modelBuilder.Entity<ContentBlock>(entity =>
-        {
-            entity.HasIndex(e => new { e.TenantId, e.Code }).IsUnique();
-
-            entity.HasMany(b => b.Translations)
-                .WithOne(t => t.ContentBlock)
-                .HasForeignKey(t => t.ContentBlockId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        // ContentBlockTranslation configuration
-        modelBuilder.Entity<ContentBlockTranslation>(entity =>
-        {
-            entity.HasIndex(e => new { e.ContentBlockId, e.LocaleCode }).IsUnique();
-        });
-
         // Menu configuration
         modelBuilder.Entity<Menu>(entity =>
         {
@@ -247,14 +277,14 @@ public class ContentDbContext : DbContext
                 .HasForeignKey(i => i.ParentId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasOne(i => i.Content)
+            entity.HasOne(i => i.BlockContent)
                 .WithMany()
-                .HasForeignKey(i => i.ContentId)
+                .HasForeignKey(i => i.BlockContentId)
                 .OnDelete(DeleteBehavior.SetNull);
 
-            entity.HasOne(i => i.Category)
+            entity.HasOne(i => i.BlockCategory)
                 .WithMany()
-                .HasForeignKey(i => i.CategoryId)
+                .HasForeignKey(i => i.BlockCategoryId)
                 .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasMany(i => i.Translations)

@@ -10,7 +10,8 @@ export default function Select({
   defaultIndex = 0,
   displayKey = 'name',
   valueKey = 'id',
-  placeholder = 'Select...'
+  placeholder = 'Select...',
+  className = ''
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const [internalValue, setInternalValue] = useState(value || options[defaultIndex] || null)
@@ -51,7 +52,7 @@ export default function Select({
   }
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className={`relative ${className}`}>
       {label && (
         <label className="block text-sm font-medium text-gray-700 mb-1">
           {label}

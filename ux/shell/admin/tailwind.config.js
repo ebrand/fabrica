@@ -62,21 +62,24 @@ export default {
     // ===================
     // Layout & positioning
     'fixed', 'relative', 'inset-0', 'z-50',
-    'min-h-full', 'min-w-full', 'h-4', 'h-6', 'h-12', 'w-4', 'w-6', 'w-8', 'w-12', 'w-full',
-    'max-w-2xl', 'max-w-3xl',
+    'min-h-full', 'min-w-full', 'h-4', 'h-6', 'h-8', 'h-10', 'h-12', 'w-4', 'w-5', 'w-6', 'w-8', 'w-10', 'w-12', 'w-full',
+    'max-w-2xl', 'max-w-3xl', 'max-w-5xl', 'max-w-6xl', 'max-w-lg',
+    'max-h-60', 'max-h-96', 'max-h-[80vh]', 'max-h-[500px]',
     // Flexbox & Grid
-    'flex', 'grid', 'inline-flex', 'items-center', 'justify-center', 'justify-end', 'justify-between',
+    'flex', 'flex-1', 'flex-col', 'grid', 'inline-flex', 'items-start', 'items-center', 'justify-center', 'justify-end', 'justify-between',
     'gap-2', 'gap-3', 'gap-4', 'gap-6',
-    'grid-cols-1', 'grid-cols-12', 'sm:grid-cols-2',
+    'grid-cols-1', 'grid-cols-2', 'grid-cols-3', 'grid-cols-4', 'grid-cols-12', 'sm:grid-cols-2', 'sm:grid-cols-3', 'md:grid-cols-2', 'lg:grid-cols-2', 'lg:grid-cols-4',
     'col-span-2', 'col-span-3', 'col-span-5',
     // Spacing
-    'p-4', 'p-6', 'p-12', 'px-2', 'px-3', 'px-4', 'px-6', 'py-0', 'py-2', 'py-3', 'py-4', 'py-6',
-    'mx-auto', 'mt-1', 'mb-4', 'ml-2', 'sm:px-6', 'lg:px-8',
-    'space-x-8', 'space-y-2', 'space-y-6',
+    'p-1', 'p-2', 'p-3', 'p-4', 'p-6', 'p-12', 'px-2', 'px-3', 'px-4', 'px-6', 'py-0', 'py-1', 'py-2', 'py-2.5', 'py-3', 'py-4', 'py-6', 'py-8',
+    'mx-4', 'mx-auto', 'mt-1', 'mt-2', 'mt-4', 'mt-6', 'mb-1', 'mb-3', 'mb-4', 'mb-6', 'ml-1', 'ml-2', 'ml-3', 'ml-auto', 'mr-1', 'mr-2', 'pr-2',
+    'pt-2', 'pt-3', 'pb-4',
+    'sm:px-6', 'lg:px-8',
+    'space-x-8', 'space-y-2', 'space-y-4', 'space-y-6',
     // Borders & Rounded
-    'border', 'border-t', 'border-r', 'border-b', 'border-b-2', 'border-transparent',
-    'border-gray-200', 'border-gray-300', 'border-green-200', 'border-red-200', 'border-yellow-200', 'border-blue-600',
-    'rounded', 'rounded-md', 'rounded-lg', 'rounded-full',
+    'border', 'border-t', 'border-r', 'border-b', 'border-b-2', 'border-2', 'border-transparent',
+    'border-gray-100', 'border-gray-200', 'border-gray-300', 'border-green-200', 'border-red-200', 'border-yellow-200', 'border-blue-500', 'border-blue-600',
+    'rounded', 'rounded-md', 'rounded-lg', 'rounded-xl', 'rounded-full',
     'divide-y', 'divide-gray-200',
     // Background colors
     'bg-white', 'bg-gray-50', 'bg-gray-100', 'bg-blue-600',
@@ -86,15 +89,18 @@ export default {
     'text-white', 'text-gray-400', 'text-gray-500', 'text-gray-600', 'text-gray-700', 'text-gray-900',
     'text-blue-600', 'text-green-700', 'text-red-600', 'text-red-700', 'text-yellow-700', 'text-purple-600', 'text-purple-800',
     // Text sizing & alignment
-    'text-xs', 'text-sm', 'text-lg', 'text-xl', 'text-left', 'text-center', 'text-right',
-    'font-medium', 'font-semibold', 'leading-5', 'tracking-wider', 'uppercase', 'whitespace-nowrap',
+    'text-xs', 'text-sm', 'text-base', 'text-lg', 'text-xl', 'text-left', 'text-center', 'text-right',
+    'font-normal', 'font-medium', 'font-semibold', 'font-mono', 'leading-5', 'tracking-wider', 'uppercase', 'whitespace-nowrap', 'line-clamp-2', 'truncate',
     // Effects
-    'shadow', 'shadow-sm', 'shadow-xl', 'animate-spin', 'rotate-90',
-    'transition-colors', 'transition-opacity',
+    'shadow', 'shadow-sm', 'shadow-lg', 'shadow-xl', 'animate-spin', 'rotate-90',
+    'transition-colors', 'transition-opacity', 'transition-shadow',
     'overflow-hidden', 'overflow-x-auto', 'overflow-y-auto',
+    'resize-none', 'object-cover',
     // Interactive states
-    'cursor-pointer', 'hover:bg-gray-50', 'hover:bg-blue-700', 'hover:bg-white',
-    'hover:text-gray-600', 'hover:text-blue-900', 'hover:text-red-900',
+    'cursor-pointer', 'cursor-not-allowed',
+    'hover:bg-gray-50', 'hover:bg-gray-100', 'hover:bg-gray-200', 'hover:bg-gray-300', 'hover:bg-blue-50', 'hover:bg-blue-700', 'hover:bg-red-50', 'hover:bg-white',
+    'hover:text-gray-500', 'hover:text-gray-600', 'hover:text-blue-600', 'hover:text-blue-700', 'hover:text-blue-900', 'hover:text-red-600', 'hover:text-red-900',
+    'hover:shadow-md', 'hover:border-blue-500',
     'focus:outline-none', 'focus:ring-2', 'focus:ring-blue-500', 'focus:ring-offset-2', 'focus:border-blue-500',
     'disabled:opacity-50', 'disabled:cursor-not-allowed',
     // Table

@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react'
 import ContentBlock from './components/ContentBlock'
+import CardDark from './components/CardDark'
+import CardMinimal from './components/CardMinimal'
+import CardHero from './components/CardHero'
 
 function App() {
   const [blocks, setBlocks] = useState([])
@@ -154,6 +157,83 @@ function App() {
               variant="dark"
               size="sm"
             />
+          </div>
+        </div>
+
+        <hr className="border-gray-200" />
+
+        <div className="space-y-6">
+          <h2 className="text-xl font-semibold text-gray-700">Specialized Card Components</h2>
+          <p className="text-sm text-gray-500">Dedicated card components with enhanced styling and features:</p>
+
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-sm font-medium text-gray-500 mb-3">CardHero - Gradient hero cards</h3>
+              <CardHero
+                content={{
+                  title: 'Welcome to Fabrica',
+                  subtitle: 'Build Your Dream Store',
+                  body: '<p>Everything you need to launch and grow your online business with powerful tools and seamless integrations.</p>',
+                  ctaText: 'Get Started',
+                  ctaUrl: '/signup'
+                }}
+                size="md"
+                gradient="indigo"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <h3 className="text-sm font-medium text-gray-500 mb-3">CardDark - Dark theme cards</h3>
+                <CardDark
+                  content={{
+                    title: 'Premium Features',
+                    subtitle: 'Unlock the full potential',
+                    body: '<p>Access advanced analytics, custom integrations, and priority support with our premium tier.</p>',
+                    ctaText: 'Upgrade Now',
+                    ctaUrl: '/pricing'
+                  }}
+                  size="md"
+                  accentColor="purple"
+                />
+              </div>
+
+              <div>
+                <h3 className="text-sm font-medium text-gray-500 mb-3">CardMinimal - Clean minimal cards</h3>
+                <CardMinimal
+                  content={{
+                    title: 'Simple & Clean',
+                    subtitle: 'Less is more',
+                    body: '<p>A minimal design approach that puts your content first without visual clutter.</p>',
+                    ctaText: 'Learn More',
+                    ctaUrl: '/features'
+                  }}
+                  size="md"
+                  bordered
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <CardHero
+                content={{ title: 'Ocean', body: '<p>Blue to cyan gradient</p>' }}
+                size="sm"
+                gradient="ocean"
+                showCta={false}
+              />
+              <CardHero
+                content={{ title: 'Sunset', body: '<p>Warm sunset colors</p>' }}
+                size="sm"
+                gradient="sunset"
+                showCta={false}
+              />
+              <CardHero
+                content={{ title: 'Aurora', body: '<p>Northern lights</p>' }}
+                size="sm"
+                gradient="aurora"
+                showCta={false}
+              />
+            </div>
           </div>
         </div>
       </div>

@@ -27,7 +27,8 @@ const ALL_DOMAINS = [
 ];
 
 const AdminToolsDrawer = ({ isOpen, onClose, onOpen }) => {
-  const [activeTab, setActiveTab] = useState('esb'); // 'esb' or 'deployment'
+  const [activeTab, setActiveTab] = useState('deployment'); // 'esb' or 'deployment'
+  const [isScriptRunning, setIsScriptRunning] = useState(false);
 
   return (
     <>
@@ -53,13 +54,22 @@ const AdminToolsDrawer = ({ isOpen, onClose, onOpen }) => {
           title={isOpen ? 'Close Admin Tools' : 'Open Admin Tools'}
         >
           {/* Gear icon */}
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke={isScriptRunning ? '#ff0000' : 'currentColor'}
+            viewBox="0 0 24 24"
+          >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
           <span
             className="text-xs font-medium tracking-wide block"
-            style={{ writingMode: 'vertical-lr', transform: 'rotate(180deg)' }}
+            style={{
+              writingMode: 'vertical-lr',
+              transform: 'rotate(180deg)',
+              color: isScriptRunning ? '#ff0000' : undefined
+            }}
           >
             Admin Tools
           </span>
@@ -110,7 +120,7 @@ const AdminToolsDrawer = ({ isOpen, onClose, onOpen }) => {
             {activeTab === 'esb' ? (
               <EsbConfigTab />
             ) : (
-              <DeploymentTab />
+              <DeploymentTab onDeployingChange={setIsScriptRunning} />
             )}
           </div>
         </div>
@@ -628,18 +638,26 @@ const EsbConfigTab = () => {
 // ============================================================================
 // DEPLOYMENT TAB - Preserved from original DevToolsDrawer
 // ============================================================================
-const DeploymentTab = () => {
+const DeploymentTab = ({ onDeployingChange }) => {
   const [scriptRunnerStatus, setScriptRunnerStatus] = useState(null);
   const [deploying, setDeploying] = useState(null);
   const [output, setOutput] = useState([]);
   const [options, setOptions] = useState({ noCache: false, killPorts: false });
   const outputRef = useRef(null);
 
+  // Notify parent when deploying state changes
+  useEffect(() => {
+    onDeployingChange?.(!!deploying);
+  }, [deploying, onDeployingChange]);
+
   const components = [
     { id: 'shell-admin', name: 'Admin Shell', category: 'Admin', color: 'blue' },
     { id: 'mfe-admin', name: 'Admin MFE', category: 'Admin', color: 'blue' },
     { id: 'bff-admin', name: 'Admin BFF', category: 'Admin', color: 'blue' },
     { id: 'acl-admin', name: 'Admin ACL', category: 'Admin', color: 'blue' },
+    { id: 'mfe-content', name: 'Content MFE', category: 'Content', color: 'purple' },
+    { id: 'bff-content', name: 'Content BFF', category: 'Content', color: 'purple' },
+    { id: 'acl-content', name: 'Content ACL', category: 'Content', color: 'purple' },
     { id: 'mfe-product', name: 'Product MFE', category: 'Product', color: 'green' },
     { id: 'bff-product', name: 'Product BFF', category: 'Product', color: 'green' },
     { id: 'acl-product', name: 'Product ACL', category: 'Product', color: 'green' },
@@ -857,7 +875,8 @@ const DeploymentTab = () => {
                 </div>
               )}
               <div className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium mb-1 ${
-                component.color === 'blue' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
+                component.color === 'blue' ? 'bg-blue-100 text-blue-800' :
+                component.color === 'purple' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'
               }`}>
                 {component.category}
               </div>

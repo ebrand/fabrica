@@ -18,6 +18,9 @@ const DevTools = () => {
     { id: 'mfe-admin', name: 'Admin MFE', category: 'Admin', color: 'blue' },
     { id: 'bff-admin', name: 'Admin BFF', category: 'Admin', color: 'blue' },
     { id: 'acl-admin', name: 'Admin ACL', category: 'Admin', color: 'blue' },
+    { id: 'mfe-content', name: 'Content MFE', category: 'Content', color: 'purple' },
+    { id: 'bff-content', name: 'Content BFF', category: 'Content', color: 'purple' },
+    { id: 'acl-content', name: 'Content ACL', category: 'Content', color: 'purple' },
     { id: 'mfe-product', name: 'Product MFE', category: 'Product', color: 'green' },
     { id: 'bff-product', name: 'Product BFF', category: 'Product', color: 'green' },
     { id: 'acl-product', name: 'Product ACL', category: 'Product', color: 'green' },
@@ -290,7 +293,8 @@ const DevTools = () => {
                 </div>
               )}
               <div className={`inline-flex px-2 py-1 rounded text-xs font-medium mb-2 ${
-                component.color === 'blue' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
+                component.color === 'blue' ? 'bg-blue-100 text-blue-800' :
+                component.color === 'purple' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'
               }`}>
                 {component.category}
               </div>

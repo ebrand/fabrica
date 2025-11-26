@@ -176,18 +176,99 @@ public class ContentController : ControllerBase
     }
 
     /// <summary>
-    /// Get all content blocks
+    /// Get all block content instances
     /// </summary>
     [HttpGet("blocks")]
-    public async Task<IActionResult> GetContentBlocks(
+    public async Task<IActionResult> GetBlockContents(
         [FromQuery] string? tenantId = null,
         [FromQuery] string? localeCode = null,
-        [FromQuery] string? blockType = null,
-        [FromQuery] bool? isGlobal = null)
+        [FromQuery] string? blockSlug = null)
     {
         try
         {
-            var response = await _contentService.GetContentBlocksAsync(tenantId, localeCode, blockType, isGlobal);
+            var response = await _contentService.GetBlockContentsAsync(tenantId, localeCode, blockSlug);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, new { error });
+            }
+
+            var contents = await response.Content.ReadFromJsonAsync<object>();
+            return Ok(contents);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching block contents");
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Get block content by ID
+    /// </summary>
+    [HttpGet("blocks/{id:guid}")]
+    public async Task<IActionResult> GetBlockContentById(Guid id, [FromQuery] string? localeCode = null)
+    {
+        try
+        {
+            var response = await _contentService.GetBlockContentByIdAsync(id, localeCode);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, new { error });
+            }
+
+            var content = await response.Content.ReadFromJsonAsync<object>();
+            return Ok(content);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching block content {Id}", id);
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Get block content by code/slug (primary endpoint for ContentBlock component)
+    /// </summary>
+    [HttpGet("blocks/code/{code}")]
+    public async Task<IActionResult> GetBlockContentByCode(
+        string code,
+        [FromQuery] string? tenantId = null,
+        [FromQuery] string? localeCode = null,
+        [FromQuery] string? variant = null)
+    {
+        try
+        {
+            var response = await _contentService.GetBlockContentByCodeAsync(code, tenantId, localeCode, variant);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, new { error });
+            }
+
+            var content = await response.Content.ReadFromJsonAsync<object>();
+            return Ok(content);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching block content by code {Code}", code);
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Get all block templates (schema definitions)
+    /// </summary>
+    [HttpGet("block-templates")]
+    public async Task<IActionResult> GetBlockTemplates([FromQuery] string? tenantId = null)
+    {
+        try
+        {
+            var response = await _contentService.GetBlocksAsync(tenantId);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -200,20 +281,20 @@ public class ContentController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching content blocks");
+            _logger.LogError(ex, "Error fetching block templates");
             return BadRequest(new { error = ex.Message });
         }
     }
 
     /// <summary>
-    /// Get content block by ID
+    /// Get all section types
     /// </summary>
-    [HttpGet("blocks/{id:guid}")]
-    public async Task<IActionResult> GetContentBlockById(Guid id, [FromQuery] string? localeCode = null)
+    [HttpGet("section-types")]
+    public async Task<IActionResult> GetSectionTypes([FromQuery] string? tenantId = null)
     {
         try
         {
-            var response = await _contentService.GetContentBlockByIdAsync(id, localeCode);
+            var response = await _contentService.GetSectionTypesAsync(tenantId);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -221,28 +302,25 @@ public class ContentController : ControllerBase
                 return StatusCode((int)response.StatusCode, new { error });
             }
 
-            var block = await response.Content.ReadFromJsonAsync<object>();
-            return Ok(block);
+            var sectionTypes = await response.Content.ReadFromJsonAsync<object>();
+            return Ok(sectionTypes);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching content block {Id}", id);
+            _logger.LogError(ex, "Error fetching section types");
             return BadRequest(new { error = ex.Message });
         }
     }
 
     /// <summary>
-    /// Get content block by code
+    /// Get variants for a specific block template
     /// </summary>
-    [HttpGet("blocks/code/{code}")]
-    public async Task<IActionResult> GetContentBlockByCode(
-        string code,
-        [FromQuery] string? tenantId = null,
-        [FromQuery] string? localeCode = null)
+    [HttpGet("block-templates/{blockSlug}/variants")]
+    public async Task<IActionResult> GetBlockVariants(string blockSlug, [FromQuery] string? tenantId = null)
     {
         try
         {
-            var response = await _contentService.GetContentBlockByCodeAsync(code, tenantId, localeCode);
+            var response = await _contentService.GetBlockVariantsAsync(blockSlug, tenantId);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -250,12 +328,281 @@ public class ContentController : ControllerBase
                 return StatusCode((int)response.StatusCode, new { error });
             }
 
-            var block = await response.Content.ReadFromJsonAsync<object>();
-            return Ok(block);
+            var variants = await response.Content.ReadFromJsonAsync<object>();
+            return Ok(variants);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching content block by code {Code}", code);
+            _logger.LogError(ex, "Error fetching variants for block {BlockSlug}", blockSlug);
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    // ==========================================
+    // BLOCK MANAGEMENT ENDPOINTS
+    // ==========================================
+
+    /// <summary>
+    /// Create a new block template
+    /// </summary>
+    [HttpPost("block-templates")]
+    public async Task<IActionResult> CreateBlock([FromBody] object block)
+    {
+        try
+        {
+            var response = await _contentService.CreateBlockAsync(block);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, new { error });
+            }
+
+            var created = await response.Content.ReadFromJsonAsync<object>();
+            return Created("", created);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating block");
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Update an existing block template
+    /// </summary>
+    [HttpPut("block-templates/{id:guid}")]
+    public async Task<IActionResult> UpdateBlock(Guid id, [FromBody] object block)
+    {
+        try
+        {
+            var response = await _contentService.UpdateBlockAsync(id, block);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, new { error });
+            }
+
+            var updated = await response.Content.ReadFromJsonAsync<object>();
+            return Ok(updated);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating block {BlockId}", id);
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Delete a block template
+    /// </summary>
+    [HttpDelete("block-templates/{id:guid}")]
+    public async Task<IActionResult> DeleteBlock(Guid id)
+    {
+        try
+        {
+            var response = await _contentService.DeleteBlockAsync(id);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, new { error });
+            }
+
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting block {BlockId}", id);
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    // ==========================================
+    // BLOCK-SECTION MANAGEMENT ENDPOINTS
+    // ==========================================
+
+    /// <summary>
+    /// Add a section type to a block
+    /// </summary>
+    [HttpPost("block-templates/{blockId:guid}/sections/{sectionTypeId:guid}")]
+    public async Task<IActionResult> AddSectionToBlock(Guid blockId, Guid sectionTypeId, [FromBody] object? request = null)
+    {
+        try
+        {
+            var response = await _contentService.AddSectionToBlockAsync(blockId, sectionTypeId, request);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, new { error });
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<object>();
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding section to block");
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Remove a section type from a block
+    /// </summary>
+    [HttpDelete("block-templates/{blockId:guid}/sections/{sectionTypeId:guid}")]
+    public async Task<IActionResult> RemoveSectionFromBlock(Guid blockId, Guid sectionTypeId)
+    {
+        try
+        {
+            var response = await _contentService.RemoveSectionFromBlockAsync(blockId, sectionTypeId);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, new { error });
+            }
+
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error removing section from block");
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Update section settings on a block
+    /// </summary>
+    [HttpPut("block-templates/{blockId:guid}/sections/{sectionTypeId:guid}")]
+    public async Task<IActionResult> UpdateBlockSection(Guid blockId, Guid sectionTypeId, [FromBody] object request)
+    {
+        try
+        {
+            var response = await _contentService.UpdateBlockSectionAsync(blockId, sectionTypeId, request);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, new { error });
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<object>();
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating block section");
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    // ==========================================
+    // BLOCK CONTENT CRUD ENDPOINTS
+    // ==========================================
+
+    /// <summary>
+    /// Create a new block content instance
+    /// </summary>
+    [HttpPost("blocks")]
+    public async Task<IActionResult> CreateBlockContent([FromBody] object content)
+    {
+        try
+        {
+            var response = await _contentService.CreateBlockContentAsync(content);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, new { error });
+            }
+
+            var created = await response.Content.ReadFromJsonAsync<object>();
+            return Created("", created);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating block content");
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Update an existing block content instance
+    /// </summary>
+    [HttpPut("blocks/{id:guid}")]
+    public async Task<IActionResult> UpdateBlockContent(Guid id, [FromBody] object content)
+    {
+        try
+        {
+            var response = await _contentService.UpdateBlockContentAsync(id, content);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, new { error });
+            }
+
+            var updated = await response.Content.ReadFromJsonAsync<object>();
+            return Ok(updated);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating block content {ContentId}", id);
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Delete a block content instance
+    /// </summary>
+    [HttpDelete("blocks/{id:guid}")]
+    public async Task<IActionResult> DeleteBlockContent(Guid id)
+    {
+        try
+        {
+            var response = await _contentService.DeleteBlockContentAsync(id);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, new { error });
+            }
+
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting block content {ContentId}", id);
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Get block content for editing (with all translations)
+    /// </summary>
+    [HttpGet("blocks/{id:guid}/edit")]
+    public async Task<IActionResult> GetBlockContentForEdit(Guid id)
+    {
+        try
+        {
+            var response = await _contentService.GetBlockContentForEditAsync(id);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, new { error });
+            }
+
+            var content = await response.Content.ReadFromJsonAsync<object>();
+            return Ok(content);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching block content for edit {ContentId}", id);
             return BadRequest(new { error = ex.Message });
         }
     }

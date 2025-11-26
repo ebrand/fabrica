@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { useStytchUser, useStytch } from '@stytch/react';
 import axios from 'axios';
 
@@ -13,16 +13,36 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
-  const { user } = useStytchUser();
+  const { user, isInitialized } = useStytchUser();
   const stytch = useStytch();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [syncedUser, setSyncedUser] = useState(null);
   const [permissions, setPermissions] = useState([]);
 
+  // Track the last synced user ID to prevent duplicate syncs
+  const lastSyncedUserId = useRef(null);
+
+  console.log('🔵 AuthProvider render - isInitialized:', isInitialized, 'user:', !!user, 'loading:', loading, 'isAuthenticated:', isAuthenticated);
+
   // Sync user with backend when Stytch user changes
   useEffect(() => {
+    // Wait for Stytch to initialize before making auth decisions
+    if (!isInitialized) {
+      console.log('🟡 Stytch not initialized yet, waiting...');
+      return;
+    }
+
+    const currentUserId = user?.user_id || null;
+
+    // Skip sync if we've already synced this user
+    if (currentUserId && currentUserId === lastSyncedUserId.current) {
+      console.log('🟡 User already synced, skipping duplicate sync');
+      return;
+    }
+
     const syncUserWithBackend = async () => {
+      console.log('🟢 syncUserWithBackend called, user:', !!user);
       if (user) {
         try {
           // Extract user info from Stytch user object
@@ -43,6 +63,7 @@ export const AuthProvider = ({ children }) => {
           setSyncedUser(response.data);
           setPermissions(response.data.permissions || []);
           setIsAuthenticated(true);
+          lastSyncedUserId.current = stytchUserId;
 
           console.log('User synced successfully:', response.data);
         } catch (error) {
@@ -54,12 +75,13 @@ export const AuthProvider = ({ children }) => {
         setIsAuthenticated(false);
         setSyncedUser(null);
         setPermissions([]);
+        lastSyncedUserId.current = null;
       }
       setLoading(false);
     };
 
     syncUserWithBackend();
-  }, [user]);
+  }, [user?.user_id, isInitialized]); // Use user_id instead of user object to prevent unnecessary re-syncs
 
   const login = async (token) => {
     try {
@@ -75,6 +97,7 @@ export const AuthProvider = ({ children }) => {
     try {
       await stytch.session.revoke();
       setIsAuthenticated(false);
+      lastSyncedUserId.current = null;
     } catch (error) {
       console.error('Logout error:', error);
     }

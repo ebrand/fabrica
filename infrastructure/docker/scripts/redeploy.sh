@@ -236,9 +236,9 @@ fi
 echo -e "${GREEN}✓ Build completed${NC}"
 echo ""
 
-# Step 3: Start the service with new image
+# Step 3: Start the service with new image (--no-deps to avoid recreating dependencies)
 echo -e "${YELLOW}[3/3] Starting ${COMPONENT}...${NC}"
-docker-compose $COMPOSE_FILES up -d "$COMPONENT"
+docker-compose $COMPOSE_FILES up -d --no-deps "$COMPONENT"
 
 if [ $? -ne 0 ]; then
     echo -e "${RED}Failed to start service${NC}"

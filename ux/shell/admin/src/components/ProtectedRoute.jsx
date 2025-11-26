@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext';
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
 
+  console.log('🟠 ProtectedRoute render - loading:', loading, 'isAuthenticated:', isAuthenticated);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">

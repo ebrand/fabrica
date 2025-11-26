@@ -57,6 +57,7 @@ const KAFKA_CONSUMER_SCRIPT = DOCKER_DIR ? path.join(DOCKER_DIR, 'scripts', 'kaf
 // Valid components that can be redeployed
 const VALID_COMPONENTS = [
   'mfe-admin', 'shell-admin', 'bff-admin', 'acl-admin',
+  'mfe-content', 'bff-content', 'acl-content',
   'mfe-product', 'bff-product', 'acl-product'
 ];
 

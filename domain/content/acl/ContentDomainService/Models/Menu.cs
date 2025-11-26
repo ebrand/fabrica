@@ -60,11 +60,11 @@ public class MenuItem
     [MaxLength(50)]
     public string LinkType { get; set; } = string.Empty;
 
-    [Column("content_id")]
-    public Guid? ContentId { get; set; }
+    [Column("block_content_id")]
+    public Guid? BlockContentId { get; set; }
 
-    [Column("category_id")]
-    public Guid? CategoryId { get; set; }
+    [Column("block_category_id")]
+    public Guid? BlockCategoryId { get; set; }
 
     [Column("url")]
     [MaxLength(1000)]
@@ -98,8 +98,8 @@ public class MenuItem
     public Menu? Menu { get; set; }
     public MenuItem? Parent { get; set; }
     public ICollection<MenuItem> Children { get; set; } = new List<MenuItem>();
-    public Content? Content { get; set; }
-    public ContentCategory? Category { get; set; }
+    public BlockContent? BlockContent { get; set; }
+    public BlockCategory? BlockCategory { get; set; }
     public ICollection<MenuItemTranslation> Translations { get; set; } = new List<MenuItemTranslation>();
 }
 

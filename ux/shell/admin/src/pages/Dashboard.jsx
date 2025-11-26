@@ -1,14 +1,18 @@
 import { lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
+import ErrorBoundary from '../components/ErrorBoundary';
 import { useAuth } from '../context/AuthContext';
 
-// Lazy load the RecentUsers component from the Admin MFE
+// Lazy load MFE components
 const RecentUsers = lazy(() => import('adminMfe/RecentUsers'));
+const Content = lazy(() => import('contentMfe/Content'));
 
 const Dashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  console.log('🟣 Dashboard render');
 
   const stats = [
     { name: 'Total Users', value: '2,651', change: '+12%', changeType: 'positive' },
@@ -19,6 +23,15 @@ const Dashboard = () => {
 
   return (
     <Layout>
+      {/* Hero Card - welcome/hero (uses Content factory) */}
+      <ErrorBoundary fallback={<div className="bg-gradient-to-r from-indigo-400 to-purple-400 rounded-2xl h-48 mb-8 flex items-center justify-center text-white/80 text-sm">Content unavailable</div>}>
+        <Suspense fallback={<div className="animate-pulse bg-gradient-to-r from-indigo-400 to-purple-400 rounded-2xl h-48 mb-8"></div>}>
+          <div className="mb-8">
+            <Content content="welcome" variant="hero" />
+          </div>
+        </Suspense>
+      </ErrorBoundary>
+
       {/* Page Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
@@ -46,21 +59,51 @@ const Dashboard = () => {
         ))}
       </div>
 
+      {/* Content Cards Row - using Content factory */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+
+        {/* Minimal Card - note-01/minimal */}
+        <ErrorBoundary fallback={<div className="bg-gray-100 rounded-lg h-40 flex items-center justify-center text-gray-400 text-sm">Content unavailable</div>}>
+          <Suspense fallback={<div className="animate-pulse bg-gray-100 rounded-lg h-40"></div>}>
+            <Content content="note-01" variant="minimal" />
+          </Suspense>
+        </ErrorBoundary>
+
+        {/* Accent Card - promo-banner/accent */}
+        <ErrorBoundary fallback={<div className="bg-indigo-100 rounded-lg h-40 flex items-center justify-center text-indigo-400 text-sm">Content unavailable</div>}>
+          <Suspense fallback={<div className="animate-pulse bg-indigo-100 rounded-lg h-40"></div>}>
+            <Content content="promo-banner" variant="accent" />
+          </Suspense>
+        </ErrorBoundary>
+
+      </div>
+
       {/* Recent Users - loaded from Admin MFE */}
-      <Suspense
-        fallback={
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-            <div className="px-6 py-5 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">Recent Users</h2>
-            </div>
-            <div className="flex items-center justify-center p-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            </div>
+      <ErrorBoundary fallback={
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+          <div className="px-6 py-5 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900">Recent Users</h2>
           </div>
-        }
-      >
-        <RecentUsers limit={5} onViewAll={() => navigate('/users')} />
-      </Suspense>
+          <div className="flex items-center justify-center p-8 text-gray-400 text-sm">
+            Unable to load recent users
+          </div>
+        </div>
+      }>
+        <Suspense
+          fallback={
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+              <div className="px-6 py-5 border-b border-gray-200">
+                <h2 className="text-lg font-semibold text-gray-900">Recent Users</h2>
+              </div>
+              <div className="flex items-center justify-center p-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              </div>
+            </div>
+          }
+        >
+          <RecentUsers limit={5} onViewAll={() => navigate('/users')} />
+        </Suspense>
+      </ErrorBoundary>
 
       {/* Quick Actions */}
       <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-3">

@@ -40,6 +40,9 @@ async function getMfeUrls() {
 // Common MFE URL (shared UI components)
 const COMMON_MFE_URL = process.env.VITE_COMMON_MFE_URL || 'http://localhost:3099'
 
+// Content MFE URL
+const CONTENT_MFE_URL = process.env.VITE_CONTENT_MFE_URL || 'http://localhost:3180'
+
 // https://vite.dev/config/
 export default defineConfig(async () => {
   const { adminMfeUrl, productMfeUrl } = await getMfeUrls()
@@ -52,7 +55,8 @@ export default defineConfig(async () => {
         remotes: {
           adminMfe: `${adminMfeUrl}/assets/remoteEntry.js`,
           productMfe: `${productMfeUrl}/assets/remoteEntry.js`,
-          commonMfe: `${COMMON_MFE_URL}/assets/remoteEntry.js`
+          commonMfe: `${COMMON_MFE_URL}/assets/remoteEntry.js`,
+          contentMfe: `${CONTENT_MFE_URL}/assets/remoteEntry.js`
         },
         shared: {
           'react': { singleton: true, requiredVersion: '^19.2.0' },
