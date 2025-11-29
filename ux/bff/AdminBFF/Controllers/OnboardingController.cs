@@ -133,7 +133,7 @@ public class OnboardingController : ControllerBase
             {
                 ClientSecret = setupIntent.ClientSecret,
                 CustomerId = customer.Id,
-                PublishableKey = _stripeService.GetPublishableKey()
+                PublishableKey = await _stripeService.GetPublishableKeyAsync()
             });
         }
         catch (Exception ex)

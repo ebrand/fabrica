@@ -119,6 +119,33 @@ public class VaultController : ControllerBase
     }
 
     /// <summary>
+    /// Get Stripe payment configuration
+    /// </summary>
+    [HttpGet("stripe")]
+    public async Task<ActionResult> GetStripeConfig()
+    {
+        try
+        {
+            _logger.LogInformation("Fetching Stripe configuration from Vault");
+
+            var stripeData = await _vaultService.GetSecretDataAsync("admin/stripe");
+
+            var config = new
+            {
+                SecretKey = stripeData["secret_key"]?.ToString() ?? string.Empty,
+                PublishableKey = stripeData["publishable_key"]?.ToString() ?? string.Empty
+            };
+
+            return Ok(config);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to fetch Stripe configuration from Vault");
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Get ACL Admin domain service configuration (.NET format)
     /// </summary>
     [HttpGet("acl-admin")]

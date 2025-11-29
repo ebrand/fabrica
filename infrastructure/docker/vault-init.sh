@@ -133,6 +133,12 @@ vault kv put fabrica/admin/oauth/google \
   client_secret="${GOOGLE_OAUTH_CLIENT_SECRET:-your-google-client-secret}" \
   redirect_uri="http://localhost:3001/authenticate"
 
+# Stripe payment secrets (replace with your actual credentials)
+echo "  💳 Storing Stripe credentials..."
+vault kv put fabrica/admin/stripe \
+  secret_key="${STRIPE_SECRET_KEY:-sk_test_your-stripe-secret-key}" \
+  publishable_key="${STRIPE_PUBLISHABLE_KEY:-pk_test_your-stripe-publishable-key}"
+
 # Customer service secrets
 vault kv put fabrica/customer/database \
   name="fabrica-customer-db" \
