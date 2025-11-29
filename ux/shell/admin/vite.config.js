@@ -2,50 +2,52 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import federation from '@originjs/vite-plugin-federation'
 
-// Get acl-admin URL from environment
+// Only the ACL Admin URL is configured here - all other URLs are fetched from it
 const ACL_ADMIN_URL = process.env.VITE_ACL_ADMIN_URL || 'http://localhost:3600'
 
 /**
- * Fetch MFE URLs from acl-admin service
- * Falls back to environment variable or localhost if fetch fails
+ * Fetch ALL service URLs from acl-admin service (which gets them from Vault/Consul)
+ * Falls back to localhost defaults if fetch fails
  */
-async function getMfeUrls() {
+async function getServiceUrls() {
+  const fallbackUrls = {
+    adminMfeUrl: 'http://localhost:3100',
+    productMfeUrl: 'http://localhost:3110',
+    contentMfeUrl: 'http://localhost:3180',
+    customerMfeUrl: 'http://localhost:3170',
+    commonMfeUrl: 'http://localhost:3099'
+  }
+
   try {
-    // Try to fetch from acl-admin
     const response = await fetch(`${ACL_ADMIN_URL}/api/config/services`)
     if (response.ok) {
       const config = await response.json()
-      console.log('✅ Fetched MFE URLs from acl-admin:', {
+      console.log('✅ Fetched service URLs from acl-admin:', {
         adminMfe: config.adminMfeUrl,
-        productMfe: config.productMfeUrl
+        productMfe: config.productMfeUrl,
+        contentMfe: config.contentMfeUrl,
+        customerMfe: config.customerMfeUrl,
+        commonMfe: config.commonMfeUrl
       })
       return {
-        adminMfeUrl: config.adminMfeUrl,
-        productMfeUrl: config.productMfeUrl
+        adminMfeUrl: config.adminMfeUrl || fallbackUrls.adminMfeUrl,
+        productMfeUrl: config.productMfeUrl || fallbackUrls.productMfeUrl,
+        contentMfeUrl: config.contentMfeUrl || fallbackUrls.contentMfeUrl,
+        customerMfeUrl: config.customerMfeUrl || fallbackUrls.customerMfeUrl,
+        commonMfeUrl: config.commonMfeUrl || fallbackUrls.commonMfeUrl
       }
     }
   } catch (error) {
-    console.warn('⚠️  Could not fetch from acl-admin, using fallback')
+    console.warn('⚠️  Could not fetch from acl-admin, using fallback URLs')
   }
 
-  // Fallback to environment variables or localhost
-  const fallbackUrls = {
-    adminMfeUrl: process.env.VITE_ADMIN_MFE_URL || 'http://localhost:3100',
-    productMfeUrl: process.env.VITE_PRODUCT_MFE_URL || 'http://localhost:3110'
-  }
-  console.log('Using fallback MFE URLs:', fallbackUrls)
+  console.log('Using fallback service URLs:', fallbackUrls)
   return fallbackUrls
 }
 
-// Common MFE URL (shared UI components)
-const COMMON_MFE_URL = process.env.VITE_COMMON_MFE_URL || 'http://localhost:3099'
-
-// Content MFE URL
-const CONTENT_MFE_URL = process.env.VITE_CONTENT_MFE_URL || 'http://localhost:3180'
-
 // https://vite.dev/config/
 export default defineConfig(async () => {
-  const { adminMfeUrl, productMfeUrl } = await getMfeUrls()
+  const urls = await getServiceUrls()
 
   return {
     plugins: [
@@ -53,10 +55,11 @@ export default defineConfig(async () => {
       federation({
         name: 'adminShell',
         remotes: {
-          adminMfe: `${adminMfeUrl}/assets/remoteEntry.js`,
-          productMfe: `${productMfeUrl}/assets/remoteEntry.js`,
-          commonMfe: `${COMMON_MFE_URL}/assets/remoteEntry.js`,
-          contentMfe: `${CONTENT_MFE_URL}/assets/remoteEntry.js`
+          adminMfe: `${urls.adminMfeUrl}/assets/remoteEntry.js`,
+          productMfe: `${urls.productMfeUrl}/assets/remoteEntry.js`,
+          commonMfe: `${urls.commonMfeUrl}/assets/remoteEntry.js`,
+          contentMfe: `${urls.contentMfeUrl}/assets/remoteEntry.js`,
+          customerMfe: `${urls.customerMfeUrl}/assets/remoteEntry.js`
         },
         shared: {
           'react': { singleton: true, requiredVersion: '^19.2.0' },

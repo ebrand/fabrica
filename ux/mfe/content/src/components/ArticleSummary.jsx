@@ -13,10 +13,10 @@ function ArticleSummary({
 }) {
   if (!content) return null
 
-  const { title, subtitle, body, author, imageUrl, ctaText, ctaUrl } = content
+  const { title, intro, subtitle, body, author, imageUrl, ctaText, ctaUrl } = content
 
   // Extract first paragraph as excerpt if no subtitle
-  const excerpt = subtitle || (body ? body.replace(/<[^>]*>/g, '').slice(0, 150) + '...' : '')
+  const excerpt = intro || subtitle || (body ? body.replace(/<[^>]*>/g, '').slice(0, 150) + '...' : '')
 
   if (horizontal) {
     return (
@@ -110,18 +110,19 @@ function ArticleSummary({
 
 ArticleSummary.propTypes = {
   content: PropTypes.shape({
-    title: PropTypes.string,
-    subtitle: PropTypes.string,
-    body: PropTypes.string,
-    author: PropTypes.string,
-    imageUrl: PropTypes.string,
-    ctaText: PropTypes.string,
-    ctaUrl: PropTypes.string
+    title    : PropTypes.string,
+    subtitle : PropTypes.string,
+    intro    : PropTypes.string,
+    body     : PropTypes.string,
+    author   : PropTypes.string,
+    imageUrl : PropTypes.string,
+    ctaText  : PropTypes.string,
+    ctaUrl   : PropTypes.string
   }),
-  showAuthor: PropTypes.bool,
-  showImage: PropTypes.bool,
-  horizontal: PropTypes.bool,
-  className: PropTypes.string
+  showAuthor : PropTypes.bool,
+  showImage  : PropTypes.bool,
+  horizontal : PropTypes.bool,
+  className  : PropTypes.string
 }
 
 export default ArticleSummary

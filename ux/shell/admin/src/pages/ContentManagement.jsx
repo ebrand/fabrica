@@ -1,21 +1,26 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import Layout from '../components/Layout';
+import TenantFilterDropdown from '../components/TenantFilterDropdown';
 
 const BFF_CONTENT_URL = import.meta.env.VITE_BFF_CONTENT_URL || 'http://localhost:3240';
 
-// Lazy load the BlockContentEditor from content MFE
+// Lazy load components from MFEs
 const BlockContentEditor = lazy(() => import('contentMfe/BlockContentEditor'));
+const Select = lazy(() => import('commonMfe/Select'));
+const ConfirmModal = lazy(() => import('commonMfe/ConfirmModal'));
 
 function ContentManagement() {
   const [contents, setContents] = useState([]);
   const [blocks, setBlocks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [filterTenantId, setFilterTenantId] = useState(null);
 
   // Editor state
   const [editorMode, setEditorMode] = useState(null); // 'create' | 'edit' | null
   const [selectedContentId, setSelectedContentId] = useState(null);
   const [selectedBlockId, setSelectedBlockId] = useState(null);
+  const [selectedBlock, setSelectedBlock] = useState(null); // Full block object for create mode
 
   // Block selection modal
   const [showBlockSelector, setShowBlockSelector] = useState(false);
@@ -23,16 +28,20 @@ function ContentManagement() {
   // Filter state
   const [filterBlock, setFilterBlock] = useState('');
 
+  // Confirm modal state
+  const [confirmModal, setConfirmModal] = useState({ show: false, contentId: null, contentName: '' });
+
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [filterTenantId]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
+      const tenantParam = filterTenantId ? `?tenantId=${filterTenantId}` : '';
       const [contentsRes, blocksRes] = await Promise.all([
-        fetch(`${BFF_CONTENT_URL}/api/content/blocks`),
-        fetch(`${BFF_CONTENT_URL}/api/content/block-templates`)
+        fetch(`${BFF_CONTENT_URL}/api/content/blocks${tenantParam}`, { credentials: 'include' }),
+        fetch(`${BFF_CONTENT_URL}/api/content/block-templates${tenantParam}`, { credentials: 'include' })
       ]);
 
       if (!contentsRes.ok) throw new Error('Failed to fetch content');
@@ -43,11 +52,20 @@ function ContentManagement() {
 
       setContents(contentsData);
       setBlocks(blocksData);
+      // Clear selection when filter changes
+      setEditorMode(null);
+      setSelectedContentId(null);
+      setSelectedBlockId(null);
+      setSelectedBlock(null);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleTenantFilterChange = (tenantId) => {
+    setFilterTenantId(tenantId);
   };
 
   const handleCreateClick = () => {
@@ -58,8 +76,9 @@ function ContentManagement() {
     setShowBlockSelector(true);
   };
 
-  const handleSelectBlock = (blockId) => {
-    setSelectedBlockId(blockId);
+  const handleSelectBlock = (block) => {
+    setSelectedBlockId(block.blockId);
+    setSelectedBlock(block); // Pass full block object to avoid re-fetch
     setSelectedContentId(null);
     setEditorMode('create');
     setShowBlockSelector(false);
@@ -71,12 +90,18 @@ function ContentManagement() {
     setEditorMode('edit');
   };
 
-  const handleDeleteClick = async (content) => {
-    if (!confirm(`Delete "${content.name}"? This cannot be undone.`)) return;
+  const handleDeleteClick = (content) => {
+    setConfirmModal({ show: true, contentId: content.contentId, contentName: content.name });
+  };
+
+  const handleDeleteConfirm = async () => {
+    const { contentId } = confirmModal;
+    setConfirmModal({ show: false, contentId: null, contentName: '' });
 
     try {
-      const response = await fetch(`${BFF_CONTENT_URL}/api/content/blocks/${content.contentId}`, {
-        method: 'DELETE'
+      const response = await fetch(`${BFF_CONTENT_URL}/api/content/blocks/${contentId}`, {
+        method: 'DELETE',
+        credentials: 'include'
       });
 
       if (!response.ok) {
@@ -84,10 +109,14 @@ function ContentManagement() {
         throw new Error(err.error || 'Failed to delete content');
       }
 
-      setContents(contents.filter(c => c.contentId !== content.contentId));
+      setContents(contents.filter(c => c.contentId !== contentId));
     } catch (err) {
       setError(err.message);
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setConfirmModal({ show: false, contentId: null, contentName: '' });
   };
 
   const handleEditorSave = (savedContent) => {
@@ -101,6 +130,7 @@ function ContentManagement() {
     setEditorMode(null);
     setSelectedContentId(null);
     setSelectedBlockId(null);
+    setSelectedBlock(null);
     // Refresh to get full data
     fetchData();
   };
@@ -109,6 +139,7 @@ function ContentManagement() {
     setEditorMode(null);
     setSelectedContentId(null);
     setSelectedBlockId(null);
+    setSelectedBlock(null);
   };
 
   // Filter contents
@@ -129,24 +160,44 @@ function ContentManagement() {
 
   return (
     <Layout>
+      {/* Delete Confirmation Modal */}
+      <Suspense fallback={null}>
+        <ConfirmModal
+          show={confirmModal.show}
+          title="Delete Content"
+          message={`Are you sure you want to delete "${confirmModal.contentName}"? This action cannot be undone.`}
+          type="danger"
+          confirmText="Delete"
+          cancelText="Cancel"
+          onConfirm={handleDeleteConfirm}
+          onCancel={handleDeleteCancel}
+        />
+      </Suspense>
+
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Content Management</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Create and manage content blocks
-            </p>
+        <div className="flex flex-col gap-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Content Management</h1>
+              <p className="mt-1 text-sm text-gray-500">
+                Create and manage content blocks
+              </p>
+            </div>
+            <button
+              onClick={handleCreateClick}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              New Content
+            </button>
           </div>
-          <button
-            onClick={handleCreateClick}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            New Content
-          </button>
+          <TenantFilterDropdown
+            selectedTenantId={filterTenantId}
+            onTenantChange={handleTenantFilterChange}
+          />
         </div>
 
         {/* Error message */}
@@ -177,6 +228,7 @@ function ContentManagement() {
             <BlockContentEditor
               contentId={selectedContentId}
               blockId={selectedBlockId}
+              block={selectedBlock}
               onSave={handleEditorSave}
               onCancel={handleEditorCancel}
             />
@@ -188,20 +240,19 @@ function ContentManagement() {
           <>
             {/* Filters */}
             <div className="flex items-center gap-4">
-              <label className="text-sm text-gray-600">Filter by block:</label>
-              <select
-                value={filterBlock}
-                onChange={(e) => setFilterBlock(e.target.value)}
-                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">All blocks</option>
-                {blocks.map(block => (
-                  <option key={block.blockId} value={block.slug}>
-                    {block.name}
-                  </option>
-                ))}
-              </select>
-              <span className="text-sm text-gray-400">
+              <div className="w-64">
+                <Suspense fallback={<div className="h-10 bg-gray-100 rounded animate-pulse" />}>
+                  <Select
+                    label="Filter by block"
+                    options={[{ blockId: '', name: 'All blocks', slug: '' }, ...blocks]}
+                    value={blocks.find(b => b.slug === filterBlock) || { blockId: '', name: 'All blocks', slug: '' }}
+                    onChange={(selected) => setFilterBlock(selected?.slug || '')}
+                    displayKey="name"
+                    valueKey="slug"
+                  />
+                </Suspense>
+              </div>
+              <span className="text-sm text-gray-400 pt-6">
                 {filteredContents.length} content item(s)
               </span>
             </div>
@@ -225,7 +276,8 @@ function ContentManagement() {
                 {filteredContents.map(content => (
                   <div
                     key={content.contentId}
-                    className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow"
+                    className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow cursor-pointer"
+                    onDoubleClick={() => handleEditClick(content)}
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex-1 min-w-0">
@@ -317,7 +369,7 @@ function ContentManagement() {
                   {blocks.map(block => (
                     <button
                       key={block.blockId}
-                      onClick={() => handleSelectBlock(block.blockId)}
+                      onClick={() => handleSelectBlock(block)}
                       className="p-4 text-left border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors"
                     >
                       <p className="font-medium text-gray-900">{block.name}</p>

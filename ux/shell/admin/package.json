@@ -14,6 +14,9 @@
   "dependencies": {
     "@headlessui/react": "^2.2.9",
     "@heroicons/react": "^2.2.0",
+    "@microsoft/signalr": "^8.0.7",
+    "@stripe/react-stripe-js": "^3.6.0",
+    "@stripe/stripe-js": "^7.3.0",
     "@stytch/react": "^19.15.2",
     "@stytch/vanilla-js": "^5.41.1",
     "axios": "^1.13.2",

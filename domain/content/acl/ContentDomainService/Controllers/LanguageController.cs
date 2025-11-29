@@ -18,16 +18,84 @@ public class LanguageController : ControllerBase
         _logger = logger;
     }
 
+    /// <summary>
+    /// Checks if the caller is a System Admin via the X-Is-System-Admin header
+    /// </summary>
+    private bool IsCallerSystemAdmin()
+    {
+        return Request.Headers.TryGetValue("X-Is-System-Admin", out var value)
+            && value.FirstOrDefault()?.Equals("true", StringComparison.OrdinalIgnoreCase) == true;
+    }
+
+    /// <summary>
+    /// Gets the tenant ID from header
+    /// Returns null if empty GUID (All Tenants mode for System Admins)
+    /// </summary>
+    private string? GetHeaderTenantId()
+    {
+        if (Request.Headers.TryGetValue("X-Tenant-ID", out var headerValue))
+        {
+            var headerTenantId = headerValue.FirstOrDefault();
+            if (!string.IsNullOrEmpty(headerTenantId))
+            {
+                // Empty GUID means "All Tenants" mode - return null to skip filtering
+                if (headerTenantId == "00000000-0000-0000-0000-000000000000")
+                {
+                    _logger.LogDebug("All Tenants mode detected from header");
+                    return null;
+                }
+                return headerTenantId;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Gets the tenant ID, requiring it unless in System Admin "All Tenants" mode
+    /// Query param tenantId takes precedence for filtering (from dropdown)
+    /// </summary>
+    private (string? tenantId, bool isAllTenantsMode) GetTenantContext(string? queryTenantId)
+    {
+        var headerTenantId = GetHeaderTenantId();
+        var isAllTenantsMode = IsCallerSystemAdmin() && headerTenantId == null;
+
+        // Query param takes precedence (explicit filter from dropdown)
+        // Then fall back to header tenant
+        var effectiveTenantId = queryTenantId ?? headerTenantId;
+
+        // If we have a tenantId, use it for filtering (even in All Tenants mode)
+        if (!string.IsNullOrEmpty(effectiveTenantId))
+        {
+            return (effectiveTenantId, isAllTenantsMode);
+        }
+
+        // If in All Tenants mode with no filter, return null to show all
+        if (isAllTenantsMode)
+        {
+            return (null, true);
+        }
+
+        // Non-admin with no tenant - use default for backward compat
+        return ("tenant-test", false);
+    }
+
     // GET: api/language
     [HttpGet]
     public async Task<ActionResult<IEnumerable<Language>>> GetLanguages(
-        [FromQuery] string tenantId = "tenant-test",
+        [FromQuery] string? tenantId = null,
         [FromQuery] bool? activeOnly = true)
     {
         try
         {
-            var query = _context.Languages
-                .Where(l => l.TenantId == tenantId);
+            var (effectiveTenantId, isAllTenantsMode) = GetTenantContext(tenantId);
+
+            var query = _context.Languages.AsQueryable();
+
+            // Apply tenant filter if a specific tenant is selected
+            if (effectiveTenantId != null)
+            {
+                query = query.Where(l => l.TenantId == effectiveTenantId);
+            }
 
             if (activeOnly == true)
             {
@@ -38,6 +106,9 @@ public class LanguageController : ControllerBase
                 .OrderBy(l => l.DisplayOrder)
                 .ThenBy(l => l.Name)
                 .ToListAsync();
+
+            _logger.LogInformation("Fetched {Count} languages for tenant {TenantId}",
+                languages.Count, effectiveTenantId ?? "ALL");
 
             return Ok(languages);
         }
@@ -54,7 +125,17 @@ public class LanguageController : ControllerBase
     {
         try
         {
-            var language = await _context.Languages.FindAsync(id);
+            var (effectiveTenantId, isAllTenantsMode) = GetTenantContext(null);
+
+            var query = _context.Languages.Where(l => l.Id == id);
+
+            // Apply tenant filter if a specific tenant is selected
+            if (effectiveTenantId != null)
+            {
+                query = query.Where(l => l.TenantId == effectiveTenantId);
+            }
+
+            var language = await query.FirstOrDefaultAsync();
 
             if (language == null)
             {
@@ -161,7 +242,17 @@ public class LanguageController : ControllerBase
     {
         try
         {
-            var language = await _context.Languages.FindAsync(id);
+            var (effectiveTenantId, isAllTenantsMode) = GetTenantContext(null);
+
+            var query = _context.Languages.Where(l => l.Id == id);
+
+            // Apply tenant filter if a specific tenant is selected
+            if (effectiveTenantId != null)
+            {
+                query = query.Where(l => l.TenantId == effectiveTenantId);
+            }
+
+            var language = await query.FirstOrDefaultAsync();
 
             if (language == null)
             {
@@ -208,7 +299,17 @@ public class LanguageController : ControllerBase
     {
         try
         {
-            var language = await _context.Languages.FindAsync(id);
+            var (effectiveTenantId, isAllTenantsMode) = GetTenantContext(null);
+
+            var query = _context.Languages.Where(l => l.Id == id);
+
+            // Apply tenant filter if a specific tenant is selected
+            if (effectiveTenantId != null)
+            {
+                query = query.Where(l => l.TenantId == effectiveTenantId);
+            }
+
+            var language = await query.FirstOrDefaultAsync();
 
             if (language == null)
             {

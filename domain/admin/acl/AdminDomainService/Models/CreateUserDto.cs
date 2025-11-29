@@ -14,6 +14,8 @@ public class CreateUserDto
 
     public string? DisplayName { get; set; }
 
+    public Guid? AvatarMediaId { get; set; }
+
     public bool IsActive { get; set; } = true;
 
     public bool IsSystemAdmin { get; set; } = false;

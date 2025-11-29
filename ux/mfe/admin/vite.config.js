@@ -34,13 +34,14 @@ export default defineConfig({
     federation({
       name: 'adminMfe',
       filename: 'remoteEntry.js',
-      // Expose the UserManagement, ApiDocumentation, and UserProfile components
+      // Expose the UserManagement, ApiDocumentation, UserProfile, and EsbTelemetry components
       exposes: {
         './UserManagement': './src/pages/UserManagement.jsx',
         './ApiDocumentation': './src/pages/ApiDocumentation.jsx',
         './UserProfile': './src/pages/UserProfile.jsx',
         './UserEditor': './src/components/UserEditor.jsx',
-        './RecentUsers': './src/components/RecentUsers.jsx'
+        './RecentUsers': './src/components/RecentUsers.jsx',
+        './EsbTelemetry': './src/pages/EsbTelemetry.jsx'
       },
       remotes: {
         commonMfe: `${COMMON_MFE_URL}/assets/remoteEntry.js`

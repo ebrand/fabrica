@@ -24,4 +24,5 @@ public class ServiceUrls
     public string CustomerServiceUrl { get; set; } = string.Empty;
     public string ProductServiceUrl { get; set; } = string.Empty;
     public string OrderServiceUrl { get; set; } = string.Empty;
+    public string ContentServiceUrl { get; set; } = string.Empty;
 }

@@ -2,10 +2,14 @@ import { useState, useEffect, Suspense, lazy } from 'react';
 import axios from 'axios';
 import configService from '../services/config';
 
-// Import common Toast component from commonMfe
-const Toast = lazy(() => import('commonMfe/Toast'));
+// Configure axios to send credentials (cookies) with all requests
+axios.defaults.withCredentials = true;
 
-function CategoryManagement() {
+// Import common components from commonMfe
+const Toast = lazy(() => import('commonMfe/Toast'));
+const ConfirmModal = lazy(() => import('commonMfe/ConfirmModal'));
+
+function CategoryManagement({ filterTenantId = null }) {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -13,7 +17,6 @@ function CategoryManagement() {
   const [showModal, setShowModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
   const [formData, setFormData] = useState({
-    tenantId: 'default',
     name: '',
     slug: '',
     description: '',
@@ -24,13 +27,16 @@ function CategoryManagement() {
   // Toast notification state
   const [toast, setToast] = useState({ show: false, title: '', message: '', type: 'success' });
 
+  // Confirm modal state
+  const [confirmModal, setConfirmModal] = useState({ show: false, categoryId: null, categoryName: '' });
+
   const showToast = (title, message, type = 'success') => {
     setToast({ show: true, title, message, type });
   };
 
   useEffect(() => {
     initializeAndFetchCategories();
-  }, []);
+  }, [filterTenantId]);
 
   const initializeAndFetchCategories = async () => {
     try {
@@ -46,7 +52,8 @@ function CategoryManagement() {
   const fetchCategories = async (url) => {
     try {
       setLoading(true);
-      const response = await axios.get(`${url}/api/categories?tenantId=default`);
+      const tenantParam = filterTenantId ? `?tenantId=${filterTenantId}` : '';
+      const response = await axios.get(`${url}/api/categories${tenantParam}`);
       setCategories(response.data);
     } catch (err) {
       setError('Failed to load categories');
@@ -60,7 +67,6 @@ function CategoryManagement() {
     if (category) {
       setEditingCategory(category);
       setFormData({
-        tenantId: category.tenantId || 'default',
         name: category.name,
         slug: category.slug,
         description: category.description || '',
@@ -70,7 +76,6 @@ function CategoryManagement() {
     } else {
       setEditingCategory(null);
       setFormData({
-        tenantId: 'default',
         name: '',
         slug: '',
         description: '',
@@ -118,16 +123,25 @@ function CategoryManagement() {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this category?')) return;
+  const handleDeleteClick = (category) => {
+    setConfirmModal({ show: true, categoryId: category.id, categoryName: category.name });
+  };
+
+  const handleDeleteConfirm = async () => {
+    const { categoryId } = confirmModal;
+    setConfirmModal({ show: false, categoryId: null, categoryName: '' });
 
     try {
-      await axios.delete(`${bffUrl}/api/categories/${id}`);
+      await axios.delete(`${bffUrl}/api/categories/${categoryId}`);
       await fetchCategories(bffUrl);
     } catch (err) {
       console.error('Error deleting category:', err);
       showToast('Error', 'Failed to delete category: ' + (err.response?.data?.error || err.message), 'error');
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setConfirmModal({ show: false, categoryId: null, categoryName: '' });
   };
 
   if (loading) {
@@ -164,6 +178,20 @@ function CategoryManagement() {
           />
         </Suspense>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <Suspense fallback={null}>
+        <ConfirmModal
+          show={confirmModal.show}
+          title="Delete Category"
+          message={`Are you sure you want to delete "${confirmModal.categoryName}"? This action cannot be undone.`}
+          type="danger"
+          confirmText="Delete"
+          cancelText="Cancel"
+          onConfirm={handleDeleteConfirm}
+          onCancel={handleDeleteCancel}
+        />
+      </Suspense>
 
       <div className="mb-4 flex justify-between items-center px-6 py-4">
         <div>
@@ -227,7 +255,7 @@ function CategoryManagement() {
                       Edit
                     </button>
                     <button
-                      onClick={() => handleDelete(category.id)}
+                      onClick={() => handleDeleteClick(category)}
                       className="text-red-600 hover:text-red-900"
                     >
                       Delete
@@ -246,7 +274,7 @@ function CategoryManagement() {
 
       {/* Modal for Create/Edit Category */}
       {showModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
+        <div className="fixed inset-0 bg-black/50 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
           <div className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4">
             <div className="px-6 py-4 border-b border-gray-200">
               <h3 className="text-lg font-medium text-gray-900">

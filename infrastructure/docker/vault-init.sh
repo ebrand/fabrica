@@ -80,7 +80,12 @@ vault kv put fabrica/infrastructure/rabbitmq \
   username="fabrica_admin" \
   password="fabrica_dev_password"
 
+vault kv put fabrica/infrastructure/kafka \
+  bootstrap_servers="kafka:9092"
+
 vault kv put fabrica/infrastructure/redis \
+  host="redis" \
+  port="6379" \
   password=""
 
 # Shared connection details
@@ -139,6 +144,59 @@ vault kv put fabrica/product/database \
   name="fabrica-product-db" \
   username="fabrica_admin" \
   password="fabrica_dev_password"
+
+# Content service secrets
+vault kv put fabrica/content/database \
+  name="fabrica-content-db" \
+  username="fabrica_admin" \
+  password="fabrica_dev_password"
+
+# ============================================================================
+# SERVICE URLS - Container-to-container communication (Docker hostnames)
+# ============================================================================
+echo "  🔗 Storing service URLs (container-to-container)..."
+
+vault kv put fabrica/services/acl \
+  admin="http://acl-admin:3600" \
+  product="http://acl-product:3420" \
+  content="http://acl-content:3460" \
+  customer="http://acl-customer:3410" \
+  order="http://acl-order:3430" \
+  finance="http://acl-finance:3440" \
+  fulfillment="http://acl-fulfillment:3450"
+
+vault kv put fabrica/services/bff \
+  admin="http://bff-admin:3200" \
+  product="http://bff-product:3220" \
+  content="http://bff-content:3240" \
+  customer="http://bff-customer:3250"
+
+# ============================================================================
+# BROWSER URLs - For frontend service discovery (localhost ports)
+# ============================================================================
+echo "  🌐 Storing browser URLs (frontend access)..."
+
+vault kv put fabrica/services/browser/acl \
+  admin="http://localhost:3600" \
+  product="http://localhost:3420" \
+  content="http://localhost:3460"
+
+vault kv put fabrica/services/browser/bff \
+  admin="http://localhost:3200" \
+  product="http://localhost:3220" \
+  content="http://localhost:3240" \
+  customer="http://localhost:3250"
+
+vault kv put fabrica/services/browser/mfe \
+  admin="http://localhost:3100" \
+  product="http://localhost:3110" \
+  content="http://localhost:3180" \
+  customer="http://localhost:3170" \
+  common="http://localhost:3099"
+
+vault kv put fabrica/services/browser/shell \
+  admin="http://localhost:3001" \
+  storefront="http://localhost:3000"
 
 # Create AppRoles for each service
 echo "👤 Creating AppRoles..."

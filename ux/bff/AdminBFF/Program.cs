@@ -1,4 +1,7 @@
 using AdminBFF.Services;
+using AdminBFF.Hubs;
+using AdminBFF.BackgroundServices;
+using AdminBFF.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,19 +20,29 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-// Add CORS - allow any origin, method, and header
+// Add SignalR for real-time telemetry
+builder.Services.AddSignalR();
+
+// Add TelemetryConsumer background service
+builder.Services.AddHostedService<TelemetryConsumer>();
+
+// Add CORS - allow credentials for cookie-based auth/tenant context
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.AllowAnyOrigin()
+        policy.SetIsOriginAllowed(_ => true)
               .AllowAnyMethod()
-              .AllowAnyHeader();
+              .AllowAnyHeader()
+              .AllowCredentials();
     });
 });
 
 // Add IHttpClientFactory for all services
 builder.Services.AddHttpClient();
+
+// Add IHttpContextAccessor for accessing HTTP context in services
+builder.Services.AddHttpContextAccessor();
 
 // Register ConfigurationService as singleton
 builder.Services.AddSingleton<ConfigurationService>();
@@ -40,8 +53,17 @@ builder.Services.AddHttpClient<AdminServiceClient>();
 // Add AdminServiceClient as scoped
 builder.Services.AddScoped<AdminServiceClient>();
 
+// Add HTTP client for ContentServiceClient
+builder.Services.AddHttpClient<ContentServiceClient>();
+
+// Add ContentServiceClient as scoped (for cross-domain operations like language provisioning)
+builder.Services.AddScoped<ContentServiceClient>();
+
 // Add ServicesRegistry
 builder.Services.AddSingleton<ServicesRegistry>();
+
+// Add StripeService for payment processing
+builder.Services.AddSingleton<StripeService>();
 
 // Add health checks
 builder.Services.AddHealthChecks();
@@ -74,8 +96,14 @@ if (app.Environment.IsDevelopment())
 // Use CORS
 app.UseCors();
 
+// Use tenant middleware to extract tenant context from cookies/headers
+app.UseTenantMiddleware();
+
 // Map controllers
 app.MapControllers();
+
+// Map SignalR hub (uses default CORS policy which allows credentials)
+app.MapHub<TelemetryHub>("/hubs/telemetry");
 
 // Health check endpoint
 app.MapHealthChecks("/health");

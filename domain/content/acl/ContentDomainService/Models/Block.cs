@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Fabrica.Domain.Esb.Interfaces;
 
 namespace ContentDomainService.Models;
 
@@ -141,11 +142,16 @@ public class BlockSection
 /// Visual presentation styles for each block type
 /// </summary>
 [Table("variant", Schema = "fabrica")]
-public class Variant
+public class Variant : IOutboxEntity
 {
     [Key]
     [Column("variant_id")]
     public Guid VariantId { get; set; }
+
+    [Column("tenant_id")]
+    [Required]
+    [StringLength(100)]
+    public string TenantId { get; set; } = string.Empty;
 
     [Column("block_id")]
     public Guid BlockId { get; set; }
@@ -194,6 +200,10 @@ public class Variant
     public Block? Block { get; set; }
 
     public ICollection<BlockContent> BlockContents { get; set; } = new List<BlockContent>();
+
+    // IOutboxEntity implementation - maps VariantId to Id
+    [NotMapped]
+    Guid IOutboxEntity.Id => VariantId;
 }
 
 /// <summary>

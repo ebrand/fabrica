@@ -33,6 +33,7 @@ const previewRegistry = {
  * Props:
  * - contentId: UUID (optional) - If provided, loads existing content for editing
  * - blockId: UUID (required for create) - The block template to use
+ * - block: Object (optional) - Full block template object (if provided, skips re-fetch)
  * - onSave: function(content) - Called after successful save
  * - onCancel: function() - Called when user cancels
  * - defaultLocale: string - Default locale code (default: 'en-US')
@@ -40,6 +41,7 @@ const previewRegistry = {
 export default function BlockContentEditor({
   contentId,
   blockId,
+  block: providedBlock,
   onSave,
   onCancel,
   defaultLocale = 'en-US'
@@ -76,7 +78,7 @@ export default function BlockContentEditor({
   // Load data on mount
   useEffect(() => {
     loadData();
-  }, [contentId, blockId]);
+  }, [contentId, blockId, providedBlock]);
 
   const loadData = async () => {
     try {
@@ -85,7 +87,9 @@ export default function BlockContentEditor({
 
       if (contentId) {
         // Edit mode - load existing content
-        const response = await fetch(`${BFF_URL}/api/content/blocks/${contentId}/edit`);
+        const response = await fetch(`${BFF_URL}/api/content/blocks/${contentId}/edit`, {
+          credentials: 'include'
+        });
         if (!response.ok) {
           const err = await response.json();
           throw new Error(err.error || 'Failed to load content');
@@ -110,22 +114,33 @@ export default function BlockContentEditor({
           const defaultLang = data.languages.find(l => l.isDefault) || data.languages[0];
           setSelectedLocale(defaultLang.localeCode);
         }
-      } else if (blockId) {
-        // Create mode - load block template and languages
-        const [blockRes, langRes] = await Promise.all([
-          fetch(`${BFF_URL}/api/content/block-templates`),
-          fetch(`${BFF_URL}/api/content/languages`)
-        ]);
+      } else if (blockId || providedBlock) {
+        // Create mode - use provided block or fetch block templates
+        let selectedBlock = providedBlock;
+        let langs = [];
 
-        if (!blockRes.ok) throw new Error('Failed to load block templates');
-        if (!langRes.ok) throw new Error('Failed to load languages');
+        if (providedBlock) {
+          // Block was provided directly - just fetch languages
+          const langRes = await fetch(`${BFF_URL}/api/content/languages`, { credentials: 'include' });
+          if (!langRes.ok) throw new Error('Failed to load languages');
+          langs = await langRes.json();
+        } else {
+          // Need to fetch block templates
+          const [blockRes, langRes] = await Promise.all([
+            fetch(`${BFF_URL}/api/content/block-templates`, { credentials: 'include' }),
+            fetch(`${BFF_URL}/api/content/languages`, { credentials: 'include' })
+          ]);
 
-        const blocks = await blockRes.json();
-        const langs = await langRes.json();
+          if (!blockRes.ok) throw new Error('Failed to load block templates');
+          if (!langRes.ok) throw new Error('Failed to load languages');
 
-        const selectedBlock = blocks.find(b => b.blockId === blockId);
-        if (!selectedBlock) {
-          throw new Error('Block template not found');
+          const blocks = await blockRes.json();
+          langs = await langRes.json();
+
+          selectedBlock = blocks.find(b => b.blockId === blockId);
+          if (!selectedBlock) {
+            throw new Error('Block template not found');
+          }
         }
 
         setBlock(selectedBlock);
@@ -232,6 +247,7 @@ export default function BlockContentEditor({
         response = await fetch(`${BFF_URL}/api/content/blocks/${contentId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify(payload)
         });
       } else {
@@ -239,6 +255,7 @@ export default function BlockContentEditor({
         response = await fetch(`${BFF_URL}/api/content/blocks`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify(payload)
         });
       }

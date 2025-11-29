@@ -1,10 +1,11 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Fabrica.Domain.Esb.Interfaces;
 
 namespace ProductDomainService.Models;
 
 [Table("category", Schema = "fabrica")]
-public class Category
+public class Category : IOutboxEntity
 {
     [Key]
     [Column("id")]

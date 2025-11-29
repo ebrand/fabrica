@@ -11,7 +11,9 @@ export default defineConfig({
       filename: 'remoteEntry.js',
       // Expose common UI components
       exposes: {
+        './AvatarUpload': './src/components/AvatarUpload.jsx',
         './Combobox': './src/components/Combobox.jsx',
+        './ConfirmModal': './src/components/ConfirmModal.jsx',
         './Select': './src/components/Select.jsx',
         './RadioCards': './src/components/RadioCards.jsx',
         './Toast': './src/components/Toast.jsx'

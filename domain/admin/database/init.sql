@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS fabrica.user (
     first_name VARCHAR(100),
     last_name VARCHAR(100),
     display_name VARCHAR(200),
+    avatar_media_id UUID,  -- References content domain media table (cross-domain, no FK)
     is_active BOOLEAN NOT NULL DEFAULT true,
     is_system_admin BOOLEAN NOT NULL DEFAULT false,
     last_login_at TIMESTAMP WITH TIME ZONE,
@@ -71,17 +72,33 @@ CREATE TRIGGER update_user_tenant_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION fabrica.update_updated_at_column();
 
--- Insert some seed data for development
+-- Insert seed data for development ONLY if no users exist
+-- This prevents re-seeding if users have been intentionally deleted
 INSERT INTO fabrica.user (email, first_name, last_name, display_name, is_active, is_system_admin, stytch_user_id)
-VALUES
-    ('admin@fabrica.dev', 'System', 'Administrator', 'System Admin', true, true, NULL),
-    ('john.doe@example.com', 'John', 'Doe', 'John Doe', true, false, NULL),
-    ('jane.smith@example.com', 'Jane', 'Smith', 'Jane Smith', true, false, NULL),
-    ('bob.wilson@example.com', 'Bob', 'Wilson', 'Bob Wilson', true, false, NULL),
-    ('alice.brown@example.com', 'Alice', 'Brown', 'Alice Brown', false, false, NULL)
-ON CONFLICT (email) DO NOTHING;
+SELECT * FROM (VALUES
+    ('admin@fabrica.dev', 'System', 'Administrator', 'System Admin', true, true, NULL::VARCHAR),
+    ('john.doe@example.com', 'John', 'Doe', 'John Doe', true, false, NULL::VARCHAR),
+    ('jane.smith@example.com', 'Jane', 'Smith', 'Jane Smith', true, false, NULL::VARCHAR),
+    ('bob.wilson@example.com', 'Bob', 'Wilson', 'Bob Wilson', true, false, NULL::VARCHAR),
+    ('alice.brown@example.com', 'Alice', 'Brown', 'Alice Brown', false, false, NULL::VARCHAR)
+) AS seed_data(email, first_name, last_name, display_name, is_active, is_system_admin, stytch_user_id)
+WHERE NOT EXISTS (SELECT 1 FROM fabrica.user LIMIT 1);
 
 -- Grant permissions
 GRANT SELECT, INSERT, UPDATE, DELETE ON fabrica.user TO fabrica_admin;
 GRANT SELECT, INSERT, UPDATE, DELETE ON fabrica.user_tenant TO fabrica_admin;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA fabrica TO fabrica_admin;
+
+-- OUTBOX NOTIFY TRIGGER
+-- Notifies the outbox_events channel when new outbox entries are created
+CREATE OR REPLACE FUNCTION cdc.notify_outbox_insert()
+RETURNS TRIGGER AS $$
+BEGIN
+    PERFORM pg_notify('outbox_events', NEW.id::text);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER outbox_notify_trigger
+    AFTER INSERT ON cdc.outbox
+    FOR EACH ROW EXECUTE FUNCTION cdc.notify_outbox_insert();

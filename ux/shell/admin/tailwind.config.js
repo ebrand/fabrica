@@ -72,7 +72,7 @@ export default {
     'col-span-2', 'col-span-3', 'col-span-5',
     // Spacing
     'p-1', 'p-2', 'p-3', 'p-4', 'p-6', 'p-12', 'px-2', 'px-3', 'px-4', 'px-6', 'py-0', 'py-1', 'py-2', 'py-2.5', 'py-3', 'py-4', 'py-6', 'py-8',
-    'mx-4', 'mx-auto', 'mt-1', 'mt-2', 'mt-4', 'mt-6', 'mb-1', 'mb-3', 'mb-4', 'mb-6', 'ml-1', 'ml-2', 'ml-3', 'ml-auto', 'mr-1', 'mr-2', 'pr-2',
+    'mx-4', 'mx-auto', 'mt-1', 'mt-2', 'mt-4', 'mt-6', 'mb-1', 'mb-3', 'mb-4', 'mb-6', 'ml-1', 'ml-2', 'ml-3', 'ml-auto', 'mr-1', 'mr-2', 'mr-4', 'pr-2',
     'pt-2', 'pt-3', 'pb-4',
     'sm:px-6', 'lg:px-8',
     'space-x-8', 'space-y-2', 'space-y-4', 'space-y-6',
@@ -83,11 +83,11 @@ export default {
     'divide-y', 'divide-gray-200',
     // Background colors
     'bg-white', 'bg-gray-50', 'bg-gray-100', 'bg-blue-600',
-    'bg-green-50', 'bg-red-50', 'bg-yellow-50', 'bg-purple-100',
-    'bg-black/50',
+    'bg-green-50', 'bg-green-100', 'bg-red-50', 'bg-yellow-50', 'bg-yellow-100', 'bg-purple-100',
+    'bg-black/50', 'bg-gray-600', 'bg-opacity-50',
     // Text colors
-    'text-white', 'text-gray-400', 'text-gray-500', 'text-gray-600', 'text-gray-700', 'text-gray-900',
-    'text-blue-600', 'text-green-700', 'text-red-600', 'text-red-700', 'text-yellow-700', 'text-purple-600', 'text-purple-800',
+    'text-white', 'text-gray-400', 'text-gray-500', 'text-gray-600', 'text-gray-700', 'text-gray-800', 'text-gray-900',
+    'text-blue-600', 'text-green-700', 'text-green-800', 'text-red-600', 'text-red-700', 'text-yellow-700', 'text-yellow-800', 'text-purple-600', 'text-purple-800',
     // Text sizing & alignment
     'text-xs', 'text-sm', 'text-base', 'text-lg', 'text-xl', 'text-left', 'text-center', 'text-right',
     'font-normal', 'font-medium', 'font-semibold', 'font-mono', 'leading-5', 'tracking-wider', 'uppercase', 'whitespace-nowrap', 'line-clamp-2', 'truncate',
@@ -105,6 +105,19 @@ export default {
     'disabled:opacity-50', 'disabled:cursor-not-allowed',
     // Table
     'align-top', 'sm:text-sm',
+    // ===================
+    // ESB Telemetry (dark terminal theme)
+    // ===================
+    // Terminal backgrounds
+    'bg-gray-900', 'bg-gray-700/50', 'bg-gray-800/50', 'hover:bg-gray-800/50', 'bg-red-900/20',
+    // Event type colors (dark mode with opacity)
+    'bg-green-900/50', 'bg-red-900/50', 'bg-blue-900/50', 'bg-purple-900/50', 'bg-yellow-900/50',
+    // Telemetry text colors
+    'text-green-400', 'text-red-400', 'text-blue-400', 'text-purple-400', 'text-cyan-400', 'text-gray-300',
+    // Connection status indicators
+    'bg-green-500', 'bg-yellow-500', 'bg-red-500', 'bg-red-100', 'text-red-800',
+    // Pulse animation for connection status
+    'animate-pulse',
   ],
   theme: {
     extend: {

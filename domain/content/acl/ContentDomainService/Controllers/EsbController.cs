@@ -18,6 +18,34 @@ public class EsbController : ControllerBase
         _logger = logger;
     }
 
+    // GET: api/esb/tables
+    // Returns all tables in the fabrica schema for this domain
+    [HttpGet("tables")]
+    public async Task<ActionResult<IEnumerable<TableInfoDto>>> GetTables()
+    {
+        try
+        {
+            var tables = await _context.Database
+                .SqlQueryRaw<TableInfoDto>(@"
+                    SELECT
+                        table_schema as SchemaName,
+                        table_name as TableName,
+                        (SELECT obj_description((table_schema || '.' || table_name)::regclass, 'pg_class')) as Description
+                    FROM information_schema.tables
+                    WHERE table_schema = 'fabrica'
+                    AND table_type = 'BASE TABLE'
+                    ORDER BY table_name")
+                .ToListAsync();
+
+            return Ok(tables);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching tables");
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     // GET: api/esb/outbox
     [HttpGet("outbox")]
     public async Task<ActionResult<IEnumerable<OutboxEvent>>> GetOutboxEvents(
@@ -94,6 +122,51 @@ public class EsbController : ControllerBase
         }
     }
 
+    // POST: api/esb/outbox-config
+    [HttpPost("outbox-config")]
+    public async Task<ActionResult<OutboxConfig>> CreateOutboxConfig(CreateOutboxConfigDto dto)
+    {
+        try
+        {
+            // Check if config already exists for this schema/table
+            var existing = await _context.OutboxConfigs
+                .FirstOrDefaultAsync(c => c.SchemaName == dto.SchemaName && c.TableName == dto.TableName);
+
+            if (existing != null)
+            {
+                return Conflict(new { error = $"Config already exists for {dto.SchemaName}.{dto.TableName}" });
+            }
+
+            const string domainName = "content";
+            var topicName = $"{domainName}.{dto.TableName}";
+
+            var config = new OutboxConfig
+            {
+                SchemaName = dto.SchemaName,
+                TableName = dto.TableName,
+                DomainName = domainName,
+                TopicName = topicName,
+                CaptureInsert = dto.CaptureInsert,
+                CaptureUpdate = dto.CaptureUpdate,
+                CaptureDelete = dto.CaptureDelete,
+                IsActive = dto.IsActive,
+                Description = dto.Description,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            _context.OutboxConfigs.Add(config);
+            await _context.SaveChangesAsync();
+
+            return CreatedAtAction(nameof(GetOutboxConfigs), new { id = config.Id }, config);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating outbox config");
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     // PUT: api/esb/outbox-config/{id}
     [HttpPut("outbox-config/{id}")]
     public async Task<IActionResult> UpdateOutboxConfig(Guid id, [FromBody] UpdateOutboxConfigRequest request)
@@ -124,6 +197,31 @@ public class EsbController : ControllerBase
         }
     }
 
+    // DELETE: api/esb/outbox-config/{id}
+    [HttpDelete("outbox-config/{id}")]
+    public async Task<IActionResult> DeleteOutboxConfig(Guid id)
+    {
+        try
+        {
+            var config = await _context.OutboxConfigs.FindAsync(id);
+
+            if (config == null)
+            {
+                return NotFound(new { error = "Outbox config not found" });
+            }
+
+            _context.OutboxConfigs.Remove(config);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Outbox config deleted successfully", id });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting outbox config {Id}", id);
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     // GET: api/esb/cache-config
     [HttpGet("cache-config")]
     public async Task<ActionResult<IEnumerable<CacheConfig>>> GetCacheConfigs()
@@ -136,6 +234,55 @@ public class EsbController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting cache configs");
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    // POST: api/esb/cache-config
+    [HttpPost("cache-config")]
+    public async Task<ActionResult<CacheConfig>> CreateCacheConfig(CreateCacheConfigDto dto)
+    {
+        try
+        {
+            // Check if config already exists for this source
+            var existing = await _context.CacheConfigs
+                .FirstOrDefaultAsync(c =>
+                    c.SourceDomain == dto.SourceDomain &&
+                    c.SourceSchema == dto.SourceSchema &&
+                    c.SourceTable == dto.SourceTable);
+
+            if (existing != null)
+            {
+                return Conflict(new { error = $"Config already exists for {dto.SourceDomain}.{dto.SourceSchema}.{dto.SourceTable}" });
+            }
+
+            // Generate consumer group name if not provided
+            var consumerGroup = dto.ConsumerGroup ?? $"content-{dto.SourceDomain}.{dto.SourceTable}";
+
+            var config = new CacheConfig
+            {
+                SourceDomain = dto.SourceDomain,
+                SourceSchema = dto.SourceSchema,
+                SourceTable = dto.SourceTable,
+                ConsumerGroup = consumerGroup,
+                ListenCreate = dto.ListenCreate,
+                ListenUpdate = dto.ListenUpdate,
+                ListenDelete = dto.ListenDelete,
+                IsActive = dto.IsActive,
+                CacheTtlSeconds = dto.CacheTtlSeconds,
+                Description = dto.Description,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            _context.CacheConfigs.Add(config);
+            await _context.SaveChangesAsync();
+
+            return CreatedAtAction(nameof(GetCacheConfigs), new { id = config.Id }, config);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating cache config");
             return BadRequest(new { error = ex.Message });
         }
     }
@@ -167,6 +314,31 @@ public class EsbController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error updating cache config {ConfigId}", id);
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    // DELETE: api/esb/cache-config/{id}
+    [HttpDelete("cache-config/{id}")]
+    public async Task<IActionResult> DeleteCacheConfig(Guid id)
+    {
+        try
+        {
+            var config = await _context.CacheConfigs.FindAsync(id);
+
+            if (config == null)
+            {
+                return NotFound(new { error = "Cache config not found" });
+            }
+
+            _context.CacheConfigs.Remove(config);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Cache config deleted successfully", id });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting cache config {Id}", id);
             return BadRequest(new { error = ex.Message });
         }
     }
@@ -241,4 +413,36 @@ public class UpdateCacheConfigRequest
     public bool? IsActive { get; set; }
     public string? ConsumerGroup { get; set; }
     public int? CacheTtlSeconds { get; set; }
+}
+
+public class TableInfoDto
+{
+    public string SchemaName { get; set; } = string.Empty;
+    public string TableName { get; set; } = string.Empty;
+    public string? Description { get; set; }
+}
+
+public class CreateOutboxConfigDto
+{
+    public string SchemaName { get; set; } = "fabrica";
+    public string TableName { get; set; } = string.Empty;
+    public bool CaptureInsert { get; set; } = true;
+    public bool CaptureUpdate { get; set; } = true;
+    public bool CaptureDelete { get; set; } = true;
+    public bool IsActive { get; set; } = true;
+    public string? Description { get; set; }
+}
+
+public class CreateCacheConfigDto
+{
+    public string SourceDomain { get; set; } = string.Empty;
+    public string SourceSchema { get; set; } = "fabrica";
+    public string SourceTable { get; set; } = string.Empty;
+    public string? ConsumerGroup { get; set; }
+    public bool ListenCreate { get; set; } = true;
+    public bool ListenUpdate { get; set; } = true;
+    public bool ListenDelete { get; set; } = true;
+    public bool IsActive { get; set; } = true;
+    public int? CacheTtlSeconds { get; set; }
+    public string? Description { get; set; }
 }

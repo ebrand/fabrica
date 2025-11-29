@@ -2,9 +2,13 @@ import { useState, useEffect, Suspense, lazy } from 'react';
 import axios from 'axios';
 import configService from '../services/config';
 
+// Configure axios to send credentials (cookies) with all requests
+axios.defaults.withCredentials = true;
+
 // Import common components from commonMfe
 const Select = lazy(() => import('commonMfe/Select'));
 const Toast = lazy(() => import('commonMfe/Toast'));
+const ConfirmModal = lazy(() => import('commonMfe/ConfirmModal'));
 
 // Status options for the product status dropdown
 const statusOptions = [
@@ -13,7 +17,7 @@ const statusOptions = [
   { id: 'archived', name: 'Archived' }
 ];
 
-function ProductManagement() {
+function ProductManagement({ filterTenantId = null }) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -21,7 +25,6 @@ function ProductManagement() {
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [formData, setFormData] = useState({
-    tenantId: 'default',
     sku: '',
     name: '',
     slug: '',
@@ -34,13 +37,16 @@ function ProductManagement() {
   // Toast notification state
   const [toast, setToast] = useState({ show: false, title: '', message: '', type: 'success' });
 
+  // Confirm modal state
+  const [confirmModal, setConfirmModal] = useState({ show: false, productId: null, productName: '' });
+
   const showToast = (title, message, type = 'success') => {
     setToast({ show: true, title, message, type });
   };
 
   useEffect(() => {
     initializeAndFetchProducts();
-  }, []);
+  }, [filterTenantId]);
 
   const initializeAndFetchProducts = async () => {
     try {
@@ -56,7 +62,8 @@ function ProductManagement() {
   const fetchProducts = async (url) => {
     try {
       setLoading(true);
-      const response = await axios.get(`${url}/api/products?tenantId=default`);
+      const tenantParam = filterTenantId ? `?tenantId=${filterTenantId}` : '';
+      const response = await axios.get(`${url}/api/products${tenantParam}`);
       setProducts(response.data);
     } catch (err) {
       setError('Failed to load products');
@@ -70,7 +77,6 @@ function ProductManagement() {
     if (product) {
       setEditingProduct(product);
       setFormData({
-        tenantId: product.tenantId || 'default',
         sku: product.sku,
         name: product.name,
         slug: product.slug,
@@ -82,7 +88,6 @@ function ProductManagement() {
     } else {
       setEditingProduct(null);
       setFormData({
-        tenantId: 'default',
         sku: '',
         name: '',
         slug: '',
@@ -120,7 +125,25 @@ function ProductManagement() {
     e.preventDefault();
     try {
       if (editingProduct) {
-        await axios.put(`${bffUrl}/api/products/${editingProduct.id}`, formData);
+        // Include id and other required fields from original product
+        const updatePayload = {
+          ...formData,
+          id: editingProduct.id,
+          tenantId: editingProduct.tenantId,
+          compareAtPrice: editingProduct.compareAtPrice,
+          costPrice: editingProduct.costPrice,
+          primaryImageUrl: editingProduct.primaryImageUrl,
+          productType: editingProduct.productType,
+          vendor: editingProduct.vendor,
+          weight: editingProduct.weight,
+          weightUnit: editingProduct.weightUnit || 'lb',
+          requiresShipping: editingProduct.requiresShipping ?? true,
+          isTaxable: editingProduct.isTaxable ?? true,
+          trackInventory: editingProduct.trackInventory ?? true,
+          seoMetaTitle: editingProduct.seoMetaTitle,
+          seoMetaDescription: editingProduct.seoMetaDescription
+        };
+        await axios.put(`${bffUrl}/api/products/${editingProduct.id}`, updatePayload);
       } else {
         await axios.post(`${bffUrl}/api/products`, formData);
       }
@@ -132,16 +155,25 @@ function ProductManagement() {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this product?')) return;
+  const handleDeleteClick = (product) => {
+    setConfirmModal({ show: true, productId: product.id, productName: product.name });
+  };
+
+  const handleDeleteConfirm = async () => {
+    const { productId } = confirmModal;
+    setConfirmModal({ show: false, productId: null, productName: '' });
 
     try {
-      await axios.delete(`${bffUrl}/api/products/${id}`);
+      await axios.delete(`${bffUrl}/api/products/${productId}`);
       await fetchProducts(bffUrl);
     } catch (err) {
       console.error('Error deleting product:', err);
       showToast('Error', 'Failed to delete product', 'error');
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setConfirmModal({ show: false, productId: null, productName: '' });
   };
 
   if (loading) {
@@ -178,6 +210,20 @@ function ProductManagement() {
           />
         </Suspense>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <Suspense fallback={null}>
+        <ConfirmModal
+          show={confirmModal.show}
+          title="Delete Product"
+          message={`Are you sure you want to delete "${confirmModal.productName}"? This action cannot be undone.`}
+          type="danger"
+          confirmText="Delete"
+          cancelText="Cancel"
+          onConfirm={handleDeleteConfirm}
+          onCancel={handleDeleteCancel}
+        />
+      </Suspense>
 
       <div className="mb-4 flex justify-between items-center px-6 py-4">
         <div>
@@ -249,7 +295,7 @@ function ProductManagement() {
                       Edit
                     </button>
                     <button
-                      onClick={() => handleDelete(product.id)}
+                      onClick={() => handleDeleteClick(product)}
                       className="text-red-600 hover:text-red-900"
                     >
                       Delete
@@ -268,7 +314,10 @@ function ProductManagement() {
 
       {/* Modal for Create/Edit Product */}
       {showModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
+        <div
+          className="fixed inset-0 bg-black/50 overflow-y-auto z-50 flex items-center justify-center transition-all duration-300"
+          style={{ right: 'var(--esb-panel-offset, 0px)' }}
+        >
           <div className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4">
             <div className="px-6 py-4 border-b border-gray-200">
               <h3 className="text-lg font-medium text-gray-900">

@@ -272,3 +272,17 @@ CREATE TRIGGER update_variant_updated_at BEFORE UPDATE ON fabrica.product_varian
 
 CREATE TRIGGER update_inventory_updated_at BEFORE UPDATE ON fabrica.inventory
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- OUTBOX NOTIFY TRIGGER
+-- Notifies the outbox_events channel when new outbox entries are created
+CREATE OR REPLACE FUNCTION cdc.notify_outbox_insert()
+RETURNS TRIGGER AS $$
+BEGIN
+    PERFORM pg_notify('outbox_events', NEW.id::text);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER outbox_notify_trigger
+    AFTER INSERT ON cdc.outbox
+    FOR EACH ROW EXECUTE FUNCTION cdc.notify_outbox_insert();

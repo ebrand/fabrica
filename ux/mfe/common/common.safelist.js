@@ -141,6 +141,29 @@ const commonSafelist = [
   'text-yellow-400', 'text-yellow-800',
   'text-blue-400', 'text-blue-800',
   'border-green-200', 'border-red-200', 'border-yellow-200', 'border-blue-200',
+
+  // ===================
+  // ConfirmModal Component Classes
+  // ===================
+  'overflow-y-auto',
+  'bg-gray-500', 'bg-opacity-75', 'bg-opacity-0',
+  'min-h-full',
+  'rounded-xl',
+  'max-w-md',
+  'scale-100', 'scale-95',
+  'opacity-100', 'opacity-0',
+  'gap-4',
+  'flex-shrink-0',
+  'w-10', 'h-10',
+  'bg-red-100',
+  'text-red-600',
+  'min-w-0', 'flex-1',
+  'mt-6',
+  'bg-red-600', 'bg-red-700',
+  'hover:bg-red-700',
+  'hover:bg-gray-50',
+  'ring-gray-500', 'ring-red-500',
+  'focus:ring-offset-2',
 ]
 
 export default commonSafelist

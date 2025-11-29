@@ -101,11 +101,11 @@ public class ContentController : ControllerBase
     /// Get available languages
     /// </summary>
     [HttpGet("languages")]
-    public async Task<IActionResult> GetLanguages()
+    public async Task<IActionResult> GetLanguages([FromQuery] string? tenantId = null)
     {
         try
         {
-            var response = await _contentService.GetLanguagesAsync();
+            var response = await _contentService.GetLanguagesAsync(tenantId);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -119,6 +119,109 @@ public class ContentController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error fetching languages");
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Get language by ID
+    /// </summary>
+    [HttpGet("languages/{id:guid}")]
+    public async Task<IActionResult> GetLanguageById(Guid id)
+    {
+        try
+        {
+            var response = await _contentService.GetLanguageByIdAsync(id);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, new { error });
+            }
+
+            var language = await response.Content.ReadFromJsonAsync<object>();
+            return Ok(language);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching language {LanguageId}", id);
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Create a new language
+    /// </summary>
+    [HttpPost("languages")]
+    public async Task<IActionResult> CreateLanguage([FromBody] object language)
+    {
+        try
+        {
+            var response = await _contentService.CreateLanguageAsync(language);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, new { error });
+            }
+
+            var created = await response.Content.ReadFromJsonAsync<object>();
+            return Created("", created);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating language");
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Update an existing language
+    /// </summary>
+    [HttpPut("languages/{id:guid}")]
+    public async Task<IActionResult> UpdateLanguage(Guid id, [FromBody] object language)
+    {
+        try
+        {
+            var response = await _contentService.UpdateLanguageAsync(id, language);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, new { error });
+            }
+
+            var updated = await response.Content.ReadFromJsonAsync<object>();
+            return Ok(updated);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating language {LanguageId}", id);
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Delete a language
+    /// </summary>
+    [HttpDelete("languages/{id:guid}")]
+    public async Task<IActionResult> DeleteLanguage(Guid id)
+    {
+        try
+        {
+            var response = await _contentService.DeleteLanguageAsync(id);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, new { error });
+            }
+
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting language {LanguageId}", id);
             return BadRequest(new { error = ex.Message });
         }
     }
@@ -171,6 +274,73 @@ public class ContentController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error fetching media {Id}", id);
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Upload media file
+    /// </summary>
+    [HttpPost("media/upload")]
+    [RequestSizeLimit(10 * 1024 * 1024)] // 10MB limit
+    public async Task<IActionResult> UploadMedia(
+        IFormFile file,
+        [FromForm] string? tenantId = null,
+        [FromForm] Guid? uploadedBy = null)
+    {
+        try
+        {
+            if (file == null || file.Length == 0)
+            {
+                return BadRequest(new { error = "No file provided" });
+            }
+
+            using var stream = file.OpenReadStream();
+            var response = await _contentService.UploadMediaAsync(
+                stream,
+                file.FileName,
+                file.ContentType,
+                tenantId,
+                uploadedBy);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, new { error });
+            }
+
+            var media = await response.Content.ReadFromJsonAsync<object>();
+            return Ok(media);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error uploading media");
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Delete media by ID
+    /// </summary>
+    [HttpDelete("media/{id:guid}")]
+    public async Task<IActionResult> DeleteMedia(Guid id)
+    {
+        try
+        {
+            var response = await _contentService.DeleteMediaAsync(id);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, new { error });
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<object>();
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting media {Id}", id);
             return BadRequest(new { error = ex.Message });
         }
     }
@@ -603,6 +773,142 @@ public class ContentController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error fetching block content for edit {ContentId}", id);
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    // ==========================================
+    // VARIANT MANAGEMENT ENDPOINTS
+    // ==========================================
+
+    /// <summary>
+    /// Create a new variant for a block template
+    /// </summary>
+    [HttpPost("block-templates/{blockId:guid}/variants")]
+    public async Task<IActionResult> CreateVariant(Guid blockId, [FromBody] object variant)
+    {
+        try
+        {
+            var response = await _contentService.CreateVariantAsync(blockId, variant);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, new { error });
+            }
+
+            var created = await response.Content.ReadFromJsonAsync<object>();
+            return Created("", created);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating variant for block {BlockId}", blockId);
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Delete a variant from a block template
+    /// </summary>
+    [HttpDelete("block-templates/{blockId:guid}/variants/{variantId:guid}")]
+    public async Task<IActionResult> DeleteVariant(Guid blockId, Guid variantId)
+    {
+        try
+        {
+            var response = await _contentService.DeleteVariantAsync(blockId, variantId);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, new { error });
+            }
+
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting variant {VariantId} from block {BlockId}", variantId, blockId);
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    // ==========================================
+    // SECTION TYPE MANAGEMENT ENDPOINTS
+    // ==========================================
+
+    /// <summary>
+    /// Create a new section type
+    /// </summary>
+    [HttpPost("section-types")]
+    public async Task<IActionResult> CreateSectionType([FromBody] object sectionType)
+    {
+        try
+        {
+            var response = await _contentService.CreateSectionTypeAsync(sectionType);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, new { error });
+            }
+
+            var created = await response.Content.ReadFromJsonAsync<object>();
+            return Created("", created);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating section type");
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Update an existing section type
+    /// </summary>
+    [HttpPut("section-types/{id:guid}")]
+    public async Task<IActionResult> UpdateSectionType(Guid id, [FromBody] object sectionType)
+    {
+        try
+        {
+            var response = await _contentService.UpdateSectionTypeAsync(id, sectionType);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, new { error });
+            }
+
+            var updated = await response.Content.ReadFromJsonAsync<object>();
+            return Ok(updated);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating section type {SectionTypeId}", id);
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Delete a section type
+    /// </summary>
+    [HttpDelete("section-types/{id:guid}")]
+    public async Task<IActionResult> DeleteSectionType(Guid id)
+    {
+        try
+        {
+            var response = await _contentService.DeleteSectionTypeAsync(id);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, new { error });
+            }
+
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting section type {SectionTypeId}", id);
             return BadRequest(new { error = ex.Message });
         }
     }

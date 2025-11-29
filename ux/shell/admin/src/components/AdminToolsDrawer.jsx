@@ -1,30 +1,12 @@
 import { useState, useEffect, useRef, Suspense, lazy } from 'react';
 
-// Lazy load Toast from commonMfe
+// Lazy load components from commonMfe
 const Toast = lazy(() => import('commonMfe/Toast'));
-
-// Domain service URL mapping
-const DOMAIN_SERVICE_URLS = {
-  admin: 'http://localhost:3600',
-  product: 'http://localhost:3420'
-};
 
 const ACL_ADMIN_URL = 'http://localhost:3600';
 const SCRIPT_RUNNER_URL = 'http://localhost:3800';
 const SCRIPT_RUNNER_API_KEY = 'fabrica-dev-key';
 
-// All possible domains for selection
-const ALL_DOMAINS = [
-  { id: 'admin', name: 'Admin' },
-  { id: 'content', name: 'Content' },
-  { id: 'customer', name: 'Customer' },
-  { id: 'finance', name: 'Finance' },
-  { id: 'fulfillment', name: 'Fulfill' },
-  { id: 'legal', name: 'Legal' },
-  { id: 'order-mgmt', name: 'Order-Mgmt' },
-  { id: 'product', name: 'Product' },
-  { id: 'sales-mktg', name: 'Sales-Mktg' }
-];
 
 const AdminToolsDrawer = ({ isOpen, onClose, onOpen }) => {
   const [activeTab, setActiveTab] = useState('deployment'); // 'esb' or 'deployment'
@@ -50,7 +32,7 @@ const AdminToolsDrawer = ({ isOpen, onClose, onOpen }) => {
         {/* Tab handle with gear icon */}
         <button
           onClick={isOpen ? onClose : onOpen}
-          className="absolute -left-2 bottom-20 bg-gray-700 hover:bg-gray-800 text-white px-1.5 py-3 rounded-l-md shadow-lg transition-colors pointer-events-auto flex flex-col items-center gap-2"
+          className="absolute -left-2 bottom-230 bg-gray-700 hover:bg-gray-800 text-white px-1.5 py-3 rounded-l-md shadow-lg transition-colors pointer-events-auto flex flex-col items-center gap-2"
           title={isOpen ? 'Close Admin Tools' : 'Open Admin Tools'}
         >
           {/* Gear icon */}
@@ -83,6 +65,16 @@ const AdminToolsDrawer = ({ isOpen, onClose, onOpen }) => {
               <h2 className="text-lg font-semibold text-gray-900">Admin Tools</h2>
               {/* Tab buttons in header */}
               <div className="flex bg-gray-200 rounded-lg p-0.5">
+                <button
+                  onClick={() => setActiveTab('domains')}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    activeTab === 'domains'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Domains
+                </button>
                 <button
                   onClick={() => setActiveTab('esb')}
                   className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
@@ -117,7 +109,9 @@ const AdminToolsDrawer = ({ isOpen, onClose, onOpen }) => {
 
           {/* Tab Content */}
           <div className="flex-1 overflow-hidden">
-            {activeTab === 'esb' ? (
+            {activeTab === 'domains' ? (
+              <DomainsTab />
+            ) : activeTab === 'esb' ? (
               <EsbConfigTab />
             ) : (
               <DeploymentTab onDeployingChange={setIsScriptRunning} />
@@ -130,13 +124,447 @@ const AdminToolsDrawer = ({ isOpen, onClose, onOpen }) => {
 };
 
 // ============================================================================
+// DOMAINS TAB - CRUD operations for the domain registry
+// ============================================================================
+const DomainsTab = () => {
+  const [domains, setDomains] = useState([]);
+  const [selectedDomainId, setSelectedDomainId] = useState('');
+  const [formData, setFormData] = useState(null);
+  const [isNew, setIsNew] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState({ show: false, title: '', message: '', type: 'success' });
+
+  // Fetch domains on mount
+  useEffect(() => {
+    fetchDomains();
+  }, []);
+
+  // Update form when selection changes
+  useEffect(() => {
+    if (selectedDomainId && !isNew) {
+      const domain = domains.find(d => d.id === selectedDomainId);
+      if (domain) {
+        setFormData({ ...domain });
+      }
+    }
+  }, [selectedDomainId, domains, isNew]);
+
+  const fetchDomains = async () => {
+    setLoading(true);
+    try {
+      // Use /all endpoint to include inactive domains for editing
+      const response = await fetch(`${ACL_ADMIN_URL}/api/esb/domain/all`);
+      if (response.ok) {
+        const data = await response.json();
+        setDomains(data);
+        // Select first domain if none selected
+        if (!selectedDomainId && data.length > 0) {
+          setSelectedDomainId(data[0].id);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch domains:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleNew = () => {
+    setIsNew(true);
+    setSelectedDomainId('');
+    setFormData({
+      domainName: '',
+      displayName: '',
+      description: '',
+      serviceUrl: '',
+      kafkaTopicPrefix: '',
+      schemaName: 'fabrica',
+      databaseName: '',
+      publishesEvents: true,
+      consumesEvents: true,
+      isActive: true,
+      hasShell: false,
+      hasMfe: false,
+      hasBff: false,
+      hasAcl: false
+    });
+  };
+
+  const handleCancel = () => {
+    setIsNew(false);
+    if (domains.length > 0) {
+      setSelectedDomainId(domains[0].id);
+    } else {
+      setFormData(null);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!formData) return;
+    setSaving(true);
+
+    try {
+      const url = isNew
+        ? `${ACL_ADMIN_URL}/api/esb/domain`
+        : `${ACL_ADMIN_URL}/api/esb/domain/${formData.id}`;
+
+      const response = await fetch(url, {
+        method: isNew ? 'POST' : 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || `HTTP ${response.status}`);
+      }
+
+      const savedDomain = await response.json();
+      setToast({ show: true, title: 'Saved', message: `Domain "${savedDomain.displayName}" saved successfully`, type: 'success' });
+
+      await fetchDomains();
+      setIsNew(false);
+      setSelectedDomainId(savedDomain.id);
+    } catch (err) {
+      setToast({ show: true, title: 'Error', message: err.message, type: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!formData?.id) return;
+    if (!confirm(`Delete domain "${formData.displayName}"? This cannot be undone.`)) return;
+
+    setSaving(true);
+    try {
+      const response = await fetch(`${ACL_ADMIN_URL}/api/esb/domain/${formData.id}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || `HTTP ${response.status}`);
+      }
+
+      setToast({ show: true, title: 'Deleted', message: `Domain deleted successfully`, type: 'info' });
+      setFormData(null);
+      setSelectedDomainId('');
+      await fetchDomains();
+    } catch (err) {
+      setToast({ show: true, title: 'Error', message: err.message, type: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  // Sort domains alphabetically by domainName
+  const sortedDomains = [...domains].sort((a, b) => a.domainName.localeCompare(b.domainName));
+
+  return (
+    <div className="h-full flex">
+      {/* Toast */}
+      {toast.show && (
+        <Suspense fallback={null}>
+          <Toast
+            title={toast.title}
+            message={toast.message}
+            type={toast.type}
+            show={toast.show}
+            onClose={() => setToast(prev => ({ ...prev, show: false }))}
+            autoHide={true}
+            autoHideDelay={3000}
+          />
+        </Suspense>
+      )}
+
+      {/* Left Sidebar - Domain List */}
+      <div className="w-32 border-r border-gray-200 bg-gray-50 flex flex-col">
+        <button
+          onClick={handleNew}
+          className="m-2 px-2 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
+        >
+          + New
+        </button>
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="flex items-center justify-center h-20">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+            </div>
+          ) : (
+            <div className="space-y-0.5 px-2 pb-2">
+              {sortedDomains.map(domain => (
+                <button
+                  key={domain.id}
+                  onClick={() => { setIsNew(false); setSelectedDomainId(domain.id); }}
+                  className={`w-full text-left px-2 py-1.5 text-xs rounded transition-colors truncate ${
+                    !isNew && selectedDomainId === domain.id
+                      ? 'bg-gray-700 text-white'
+                      : domain.isActive
+                        ? 'text-gray-700 hover:bg-gray-200'
+                        : 'text-gray-400 hover:bg-gray-200 italic'
+                  }`}
+                  title={`${domain.displayName}${!domain.isActive ? ' (inactive)' : ''}`}
+                >
+                  {domain.domainName}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Right Side - Form */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 overflow-y-auto p-4">
+        {loading ? (
+          <div className="flex items-center justify-center h-32">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          </div>
+        ) : formData ? (
+          <div className="space-y-4">
+            {/* Basic Info */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Domain Name *</label>
+                <input
+                  type="text"
+                  value={formData.domainName || ''}
+                  onChange={(e) => handleChange('domainName', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="e.g., product"
+                  disabled={!isNew}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Display Name *</label>
+                <input
+                  type="text"
+                  value={formData.displayName || ''}
+                  onChange={(e) => handleChange('displayName', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="e.g., Product Domain"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
+              <textarea
+                value={formData.description || ''}
+                onChange={(e) => handleChange('description', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                rows={2}
+                placeholder="Brief description of this domain's responsibilities"
+              />
+            </div>
+
+            {/* Service Info */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Service URL</label>
+                <input
+                  type="text"
+                  value={formData.serviceUrl || ''}
+                  onChange={(e) => handleChange('serviceUrl', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="http://acl-product:3420"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Kafka Topic Prefix</label>
+                <input
+                  type="text"
+                  value={formData.kafkaTopicPrefix || ''}
+                  onChange={(e) => handleChange('kafkaTopicPrefix', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="product"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Schema Name</label>
+                <input
+                  type="text"
+                  value={formData.schemaName || ''}
+                  onChange={(e) => handleChange('schemaName', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="fabrica"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Database Name</label>
+                <input
+                  type="text"
+                  value={formData.databaseName || ''}
+                  onChange={(e) => handleChange('databaseName', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="fabrica-product-db"
+                />
+              </div>
+            </div>
+
+            {/* Component Flags */}
+            <div className="border border-gray-200 rounded-md p-3">
+              <h4 className="text-xs font-semibold text-gray-700 mb-2">Available Components</h4>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleChange('hasShell', !formData.hasShell)}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md border transition-all cursor-pointer ${
+                    formData.hasShell
+                      ? 'bg-red-500 text-white border-red-500 shadow-sm'
+                      : 'bg-white text-gray-500 border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  Shell
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleChange('hasMfe', !formData.hasMfe)}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md border transition-all cursor-pointer ${
+                    formData.hasMfe
+                      ? 'bg-blue-500 text-white border-blue-500 shadow-sm'
+                      : 'bg-white text-gray-500 border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  MFE
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleChange('hasBff', !formData.hasBff)}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md border transition-all cursor-pointer ${
+                    formData.hasBff
+                      ? 'bg-gray-600 text-white border-gray-600 shadow-sm'
+                      : 'bg-white text-gray-500 border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  BFF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleChange('hasAcl', !formData.hasAcl)}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md border transition-all cursor-pointer ${
+                    formData.hasAcl
+                      ? 'bg-yellow-500 text-white border-yellow-500 shadow-sm'
+                      : 'bg-white text-gray-500 border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  ACL
+                </button>
+              </div>
+            </div>
+
+            {/* ESB Flags */}
+            <div className="border border-gray-200 rounded-md p-3">
+              <h4 className="text-xs font-semibold text-gray-700 mb-2">ESB Configuration</h4>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleChange('publishesEvents', !formData.publishesEvents)}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md border transition-all cursor-pointer ${
+                    formData.publishesEvents
+                      ? 'bg-blue-500 text-white border-blue-500 shadow-sm'
+                      : 'bg-white text-gray-500 border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  Publishes Events
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleChange('consumesEvents', !formData.consumesEvents)}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md border transition-all cursor-pointer ${
+                    formData.consumesEvents
+                      ? 'bg-purple-500 text-white border-purple-500 shadow-sm'
+                      : 'bg-white text-gray-500 border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  Consumes Events
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleChange('isActive', !formData.isActive)}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md border transition-all cursor-pointer ${
+                    formData.isActive
+                      ? 'bg-green-500 text-white border-green-500 shadow-sm'
+                      : 'bg-white text-gray-500 border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  Active
+                </button>
+              </div>
+            </div>
+
+            {/* Timestamps (read-only) */}
+            {!isNew && formData.createdAt && (
+              <div className="text-xs text-gray-500 pt-2 border-t border-gray-200">
+                <span>Created: {new Date(formData.createdAt).toLocaleString()}</span>
+                {formData.updatedAt && (
+                  <span className="ml-4">Updated: {new Date(formData.updatedAt).toLocaleString()}</span>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-32 text-gray-500">
+            Select a domain or create a new one
+          </div>
+        )}
+        </div>
+
+        {/* Action Buttons */}
+        {formData && (
+          <div className="px-4 py-2 border-t border-gray-200 bg-gray-50 flex justify-between">
+            <div>
+              {!isNew && (
+                <button
+                  onClick={handleDelete}
+                  disabled={saving}
+                  className="px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded hover:bg-red-700 transition-colors disabled:opacity-50"
+                >
+                  Delete
+                </button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              {isNew && (
+                <button
+                  onClick={handleCancel}
+                  className="px-3 py-1.5 bg-gray-200 text-gray-700 text-xs font-medium rounded hover:bg-gray-300 transition-colors"
+                >
+                  Cancel
+                </button>
+              )}
+              <button
+                onClick={handleSave}
+                disabled={saving || !formData.domainName || !formData.displayName}
+                className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                {saving ? 'Saving...' : isNew ? 'Create' : 'Save'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
 // ESB CONFIG TAB - Redesigned with side-by-side Publishing/Subscribing layout
 // ============================================================================
 const EsbConfigTab = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [domains, setDomains] = useState([]);
-  const [selectedDomain, setSelectedDomain] = useState('product');
+  const [selectedDomain, setSelectedDomain] = useState(null);
   const [tables, setTables] = useState([]);
   const [outboxConfigs, setOutboxConfigs] = useState([]);
   const [cacheConfigs, setCacheConfigs] = useState([]);
@@ -144,8 +572,10 @@ const EsbConfigTab = () => {
   const [expandedItems, setExpandedItems] = useState({});
   const [toast, setToast] = useState({ show: false, title: '', message: '', type: 'success' });
 
-  const getServiceUrl = (domain = selectedDomain) => {
-    return DOMAIN_SERVICE_URLS[domain] || ACL_ADMIN_URL;
+  // Get service URL from domain registry (data-driven)
+  const getServiceUrl = (domainName = selectedDomain) => {
+    const domain = domains.find(d => d.domainName === domainName);
+    return domain?.serviceUrl || null;
   };
 
   // Fetch domain registry
@@ -167,16 +597,30 @@ const EsbConfigTab = () => {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
       setDomains(data);
+      // Auto-select first domain with a service URL
+      if (!selectedDomain && data.length > 0) {
+        const firstAvailable = data.find(d => d.serviceUrl);
+        if (firstAvailable) {
+          setSelectedDomain(firstAvailable.domainName);
+        }
+      }
     } catch (err) {
       console.warn('Failed to fetch domains:', err);
     }
   };
 
   const fetchDomainData = async () => {
+    const serviceUrl = getServiceUrl();
+    if (!serviceUrl) {
+      setTables([]);
+      setOutboxConfigs([]);
+      setCacheConfigs([]);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
-      const serviceUrl = getServiceUrl();
       const [tablesRes, outboxRes, cacheRes] = await Promise.all([
         fetch(`${serviceUrl}/api/esb/tables`),
         fetch(`${serviceUrl}/api/esb/outbox-config`),
@@ -204,13 +648,12 @@ const EsbConfigTab = () => {
   };
 
   const fetchOtherDomainsPublishing = async () => {
-    const otherDomains = domains.filter(d => d.domainName !== selectedDomain);
+    const otherDomains = domains.filter(d => d.domainName !== selectedDomain && d.serviceUrl);
     const publishing = {};
 
     for (const domain of otherDomains) {
       try {
-        const serviceUrl = getServiceUrl(domain.domainName);
-        const response = await fetch(`${serviceUrl}/api/esb/outbox-config`);
+        const response = await fetch(`${domain.serviceUrl}/api/esb/outbox-config`);
         if (response.ok) {
           publishing[domain.domainName] = await response.json();
         }
@@ -358,10 +801,10 @@ const EsbConfigTab = () => {
     }
   };
 
-  // Get domain display name
+  // Get domain display name from registry
   const getDomainDisplayName = (domainId) => {
     const found = domains.find(d => d.domainName === domainId);
-    return found?.displayName || ALL_DOMAINS.find(d => d.id === domainId)?.name || domainId;
+    return found?.displayName || domainId;
   };
 
   // Group subscriptions by source domain
@@ -420,21 +863,18 @@ const EsbConfigTab = () => {
         </Suspense>
       )}
 
-      {/* Domain Selection Pills */}
+      {/* Domain Selection Pills - Data-driven from admin.domain table */}
       <div className="px-4 py-3 border-b border-gray-200">
-        <p className="text-sm text-gray-600 mb-2">
-          Select a domain below to configure which tables it publishes to the enterprise and to which tables from other domains it subscribes.
-        </p>
         <p className="text-xs font-medium text-gray-500 mb-2">Domain selection:</p>
         <div className="grid grid-cols-3 gap-2">
-          {ALL_DOMAINS.map(domain => {
-            const isSelected = selectedDomain === domain.id;
-            const isAvailable = DOMAIN_SERVICE_URLS[domain.id];
+          {[...domains].sort((a, b) => a.domainName.localeCompare(b.domainName)).map(domain => {
+            const isSelected = selectedDomain === domain.domainName;
+            const isAvailable = !!domain.serviceUrl;
 
             return (
               <button
                 key={domain.id}
-                onClick={() => isAvailable && setSelectedDomain(domain.id)}
+                onClick={() => isAvailable && setSelectedDomain(domain.domainName)}
                 disabled={!isAvailable}
                 className={`px-3 py-2 text-sm font-medium rounded-md border transition-all ${
                   isSelected
@@ -443,8 +883,9 @@ const EsbConfigTab = () => {
                       ? 'border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-gray-400'
                       : 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
                 }`}
+                title={isAvailable ? domain.serviceUrl : 'No service URL configured'}
               >
-                {domain.name}
+                {domain.displayName || domain.domainName}
               </button>
             );
           })}
@@ -470,7 +911,16 @@ const EsbConfigTab = () => {
 
       {/* Domain Panel */}
       <div className="flex-1 overflow-y-auto p-4">
-        {loading ? (
+        {domains.length === 0 ? (
+          <div className="flex items-center justify-center h-32">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <span className="ml-3 text-gray-500">Loading domains...</span>
+          </div>
+        ) : !selectedDomain ? (
+          <div className="flex items-center justify-center h-32 text-gray-500">
+            Select a domain above to configure ESB
+          </div>
+        ) : loading ? (
           <div className="flex items-center justify-center h-32">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
           </div>
@@ -636,13 +1086,15 @@ const EsbConfigTab = () => {
 };
 
 // ============================================================================
-// DEPLOYMENT TAB - Preserved from original DevToolsDrawer
+// DEPLOYMENT TAB - Grid layout with domains as rows, component types as columns
 // ============================================================================
 const DeploymentTab = ({ onDeployingChange }) => {
   const [scriptRunnerStatus, setScriptRunnerStatus] = useState(null);
   const [deploying, setDeploying] = useState(null);
   const [output, setOutput] = useState([]);
   const [options, setOptions] = useState({ noCache: false, killPorts: false });
+  const [domains, setDomains] = useState([]);
+  const [loading, setLoading] = useState(true);
   const outputRef = useRef(null);
 
   // Notify parent when deploying state changes
@@ -650,18 +1102,46 @@ const DeploymentTab = ({ onDeployingChange }) => {
     onDeployingChange?.(!!deploying);
   }, [deploying, onDeployingChange]);
 
-  const components = [
-    { id: 'shell-admin', name: 'Admin Shell', category: 'Admin', color: 'blue' },
-    { id: 'mfe-admin', name: 'Admin MFE', category: 'Admin', color: 'blue' },
-    { id: 'bff-admin', name: 'Admin BFF', category: 'Admin', color: 'blue' },
-    { id: 'acl-admin', name: 'Admin ACL', category: 'Admin', color: 'blue' },
-    { id: 'mfe-content', name: 'Content MFE', category: 'Content', color: 'purple' },
-    { id: 'bff-content', name: 'Content BFF', category: 'Content', color: 'purple' },
-    { id: 'acl-content', name: 'Content ACL', category: 'Content', color: 'purple' },
-    { id: 'mfe-product', name: 'Product MFE', category: 'Product', color: 'green' },
-    { id: 'bff-product', name: 'Product BFF', category: 'Product', color: 'green' },
-    { id: 'acl-product', name: 'Product ACL', category: 'Product', color: 'green' },
-  ];
+  // Fetch domain registry on mount
+  useEffect(() => {
+    fetchDomains();
+  }, []);
+
+  const fetchDomains = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${ACL_ADMIN_URL}/api/esb/domain`);
+      if (response.ok) {
+        const data = await response.json();
+        // Transform to the format we need, sorted by domain name
+        const domainList = data
+          .map(d => ({
+            id: d.domainName,
+            name: d.domainName,
+            displayName: d.displayName,
+            hasShell: d.hasShell,
+            hasMfe: d.hasMfe,
+            hasBff: d.hasBff,
+            hasAcl: d.hasAcl
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        setDomains(domainList);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch domains:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Component types (columns)
+  const componentTypes = ['Shell', 'MFE', 'BFF', 'ACL'];
+
+  // Build component ID from domain and type
+  const getComponentId = (domain, type) => {
+    const typeLower = type.toLowerCase();
+    return `${typeLower}-${domain.id}`;
+  };
 
   useEffect(() => {
     checkScriptRunnerStatus();
@@ -800,90 +1280,142 @@ const DeploymentTab = ({ onDeployingChange }) => {
     <div className="flex flex-col h-full">
       {/* Script Runner Status */}
       {!scriptRunnerStatus?.scriptRunnerAvailable && (
-        <div className="mx-4 mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-          <div className="flex">
-            <svg className="w-4 h-4 text-yellow-400 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="mx-4 mt-3 bg-yellow-50 border border-yellow-200 rounded-lg p-2">
+          <div className="flex items-center">
+            <svg className="w-4 h-4 text-yellow-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
-            <div>
-              <h3 className="text-xs font-medium text-yellow-800">Script Runner Not Available</h3>
-              <pre className="mt-1 text-xs bg-yellow-100 p-1.5 rounded font-mono">
-                cd infrastructure/local-services/script-runner && ./start.sh
-              </pre>
+            <div className="text-xs">
+              <span className="font-medium text-yellow-800">Script Runner Not Available: </span>
+              <code className="bg-yellow-100 px-1 rounded">cd infrastructure/local-services/script-runner && ./start.sh</code>
             </div>
           </div>
         </div>
       )}
 
-      {/* Status indicator */}
-      <div className="px-4 py-2 flex items-center gap-2">
-        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-          scriptRunnerStatus?.scriptRunnerAvailable
-            ? 'bg-green-100 text-green-800'
-            : 'bg-red-100 text-red-800'
-        }`}>
-          <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
-            scriptRunnerStatus?.scriptRunnerAvailable ? 'bg-green-500' : 'bg-red-500'
-          }`}></span>
-          {scriptRunnerStatus?.scriptRunnerAvailable ? 'Connected' : 'Disconnected'}
-        </span>
-      </div>
-
-      {/* Options */}
+      {/* Header and Options */}
       <div className="px-4 py-2 border-b border-gray-200">
-        <div className="flex gap-4">
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              checked={options.noCache}
-              onChange={(e) => setOptions(prev => ({ ...prev, noCache: e.target.checked }))}
-              className="h-3.5 w-3.5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-            />
-            <span className="ml-1.5 text-xs text-gray-700">No Cache</span>
-          </label>
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              checked={options.killPorts}
-              onChange={(e) => setOptions(prev => ({ ...prev, killPorts: e.target.checked }))}
-              className="h-3.5 w-3.5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-            />
-            <span className="ml-1.5 text-xs text-gray-700">Kill Local Ports</span>
-          </label>
+        <div className="flex items-center gap-4">
+          <div className="flex gap-3">
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                checked={options.noCache}
+                onChange={(e) => setOptions(prev => ({ ...prev, noCache: e.target.checked }))}
+                className="h-3.5 w-3.5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              <span className="ml-1.5 text-xs text-gray-700">No Cache</span>
+            </label>
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                checked={options.killPorts}
+                onChange={(e) => setOptions(prev => ({ ...prev, killPorts: e.target.checked }))}
+                className="h-3.5 w-3.5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              <span className="ml-1.5 text-xs text-gray-700">Kill Local Ports</span>
+            </label>
+          </div>
+          <span className={`ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+            scriptRunnerStatus?.scriptRunnerAvailable
+              ? 'bg-green-100 text-green-800'
+              : 'bg-red-100 text-red-800'
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
+              scriptRunnerStatus?.scriptRunnerAvailable ? 'bg-green-500' : 'bg-red-500'
+            }`}></span>
+            {scriptRunnerStatus?.scriptRunnerAvailable ? 'Connected' : 'Disconnected'}
+          </span>
         </div>
       </div>
 
-      {/* Components Grid */}
-      <div className="px-4 py-3 border-b border-gray-200">
-        <div className="grid grid-cols-2 gap-2">
-          {components.map((component) => (
-            <button
-              key={component.id}
-              onClick={() => handleRedeploy(component.id)}
-              disabled={!scriptRunnerStatus?.scriptRunnerAvailable || deploying}
-              className={`relative px-3 py-2 rounded-lg border text-left transition-all text-sm ${
-                deploying === component.id
-                  ? 'border-blue-500 bg-blue-50'
-                  : scriptRunnerStatus?.scriptRunnerAvailable && !deploying
-                    ? 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm cursor-pointer'
-                    : 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
-              }`}
-            >
-              {deploying === component.id && (
-                <div className="absolute top-2 right-2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                </div>
-              )}
-              <div className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium mb-1 ${
-                component.color === 'blue' ? 'bg-blue-100 text-blue-800' :
-                component.color === 'purple' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'
-              }`}>
-                {component.category}
-              </div>
-              <div className="font-medium text-gray-900 text-xs">{component.name}</div>
-            </button>
-          ))}
-        </div>
+      {/* Deployment Grid */}
+      <div className="px-4 py-2 border-b border-gray-200">
+        {loading ? (
+          <div className="flex items-center justify-center h-32">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+            <span className="ml-2 text-sm text-gray-500">Loading domains...</span>
+          </div>
+        ) : domains.length === 0 ? (
+          <div className="text-center py-8 text-gray-500 text-sm">
+            No domains found. Add domains in the Domains tab.
+          </div>
+        ) : (
+        <table className="w-full border-collapse">
+          <thead>
+            <tr>
+              <th className="w-24"></th>
+              {componentTypes.map(type => (
+                <th key={type} className="px-2 py-1 text-center text-xs font-semibold text-gray-700">
+                  {type}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {domains.map(domain => (
+              <tr key={domain.id}>
+                <td className="pr-3 py-0.5 text-right">
+                  <span className="text-xs font-medium text-gray-700">{domain.name}</span>
+                </td>
+                {componentTypes.map(type => {
+                  const componentId = getComponentId(domain, type);
+                  const isDeploying = deploying === componentId;
+
+                  // Check domain for component availability (data-driven from database)
+                  const hasComponent = type === 'Shell' ? domain.hasShell :
+                                       type === 'MFE' ? domain.hasMfe :
+                                       type === 'BFF' ? domain.hasBff :
+                                       type === 'ACL' ? domain.hasAcl : false;
+
+                  const isDisabled = !scriptRunnerStatus?.scriptRunnerAvailable || (deploying && !isDeploying) || !hasComponent;
+
+                  // Color scheme by component type
+                  const getButtonColors = () => {
+                    if (isDeploying) return 'bg-green-500 text-white ring-2 ring-green-300';
+                    if (isDisabled) {
+                      switch (type) {
+                        case 'Shell': return 'bg-red-50 text-gray-400 cursor-not-allowed';
+                        case 'MFE': return 'bg-blue-50 text-gray-400 cursor-not-allowed';
+                        case 'BFF': return 'bg-gray-100 text-gray-400 cursor-not-allowed';
+                        case 'ACL': return 'bg-yellow-50 text-gray-400 cursor-not-allowed';
+                        default: return 'bg-gray-100 text-gray-400 cursor-not-allowed';
+                      }
+                    }
+                    switch (type) {
+                      case 'Shell': return 'bg-red-100 hover:bg-red-200 text-gray-700 hover:shadow-sm active:bg-red-300';
+                      case 'MFE': return 'bg-blue-100 hover:bg-blue-200 text-gray-700 hover:shadow-sm active:bg-blue-300';
+                      case 'BFF': return 'bg-gray-200 hover:bg-gray-300 text-gray-700 hover:shadow-sm active:bg-gray-400';
+                      case 'ACL': return 'bg-yellow-100 hover:bg-yellow-200 text-gray-700 hover:shadow-sm active:bg-yellow-300';
+                      default: return 'bg-gray-100 hover:bg-gray-200 text-gray-700 hover:shadow-sm';
+                    }
+                  };
+
+                  return (
+                    <td key={type} className="px-1 py-0.5">
+                      <button
+                        onClick={() => handleRedeploy(componentId)}
+                        disabled={isDisabled}
+                        className={`w-full h-6 rounded text-xs font-medium transition-all relative group ${getButtonColors()}`}
+                      >
+                        {isDeploying ? (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                          </div>
+                        ) : (
+                          <span className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px]">
+                            {domain.name}
+                          </span>
+                        )}
+                      </button>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        )}
       </div>
 
       {/* Output Console */}

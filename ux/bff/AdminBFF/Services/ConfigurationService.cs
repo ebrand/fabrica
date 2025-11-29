@@ -96,6 +96,7 @@ public class ConfigurationService
             "customer" => services.CustomerServiceUrl,
             "product" => services.ProductServiceUrl,
             "order" => services.OrderServiceUrl,
+            "content" => services.ContentServiceUrl,
             _ => throw new ArgumentException($"Unknown service: {serviceName}", nameof(serviceName))
         };
     }
@@ -117,10 +118,12 @@ public class ConfigurationService
             },
             Services = new ServiceUrls
             {
+                // All fallbacks use Docker container hostnames for container-to-container communication
                 AdminServiceUrl = _configuration["ADMIN_SERVICE_URL"] ?? "http://acl-admin:3600",
-                CustomerServiceUrl = _configuration["CUSTOMER_SERVICE_URL"] ?? "http://localhost:3410",
-                ProductServiceUrl = _configuration["PRODUCT_SERVICE_URL"] ?? "http://localhost:3420",
-                OrderServiceUrl = _configuration["ORDER_SERVICE_URL"] ?? "http://localhost:3430"
+                CustomerServiceUrl = "http://acl-customer:3410",
+                ProductServiceUrl = "http://acl-product:3420",
+                OrderServiceUrl = "http://acl-order:3430",
+                ContentServiceUrl = _configuration["CONTENT_SERVICE_URL"] ?? "http://acl-content:3460"
             }
         };
 

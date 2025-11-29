@@ -44,6 +44,12 @@ public class User : IOutboxEntity
     [MaxLength(200)]
     public string? DisplayName { get; set; }
 
+    /// <summary>
+    /// References media record in content domain for user's avatar image
+    /// </summary>
+    [Column("avatar_media_id")]
+    public Guid? AvatarMediaId { get; set; }
+
     [Required]
     [Column("is_active")]
     public bool IsActive { get; set; } = true;
@@ -68,4 +74,8 @@ public class User : IOutboxEntity
 
     [Column("updated_by")]
     public Guid? UpdatedBy { get; set; }
+
+    // Navigation properties
+    [JsonIgnore]
+    public virtual ICollection<UserTenant> UserTenants { get; set; } = new List<UserTenant>();
 }

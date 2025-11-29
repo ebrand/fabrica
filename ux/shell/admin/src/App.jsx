@@ -3,14 +3,22 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { StytchProvider } from '@stytch/react';
 import { StytchUIClient } from '@stytch/vanilla-js';
 import { AuthProvider } from './context/AuthContext';
+import { TelemetryProvider } from './context/TelemetryContext';
+import { TenantProvider } from './context/TenantContext';
+import { OnboardingProvider } from './context/OnboardingContext';
 import ErrorBoundary from './components/ErrorBoundary';
+import TenantSelector from './components/TenantSelector';
+import OnboardingGuard from './components/OnboardingGuard';
 import Login from './pages/Login';
+import Onboarding from './pages/Onboarding';
 import Dashboard from './pages/Dashboard';
 import Users from './pages/Users';
 import Products from './pages/Products';
+import Customers from './pages/Customers';
 import Categories from './pages/Categories';
 import BlockManagement from './pages/BlockManagement';
 import ContentManagement from './pages/ContentManagement';
+import LanguageManagement from './pages/LanguageManagement';
 import ApiDocs from './pages/ApiDocs';
 import Profile from './pages/Profile';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -19,23 +27,28 @@ import './index.css';
 
 function App() {
   const [stytch, setStytch] = useState(null);
+  const [bffUrl, setBffUrl] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     // Initialize Stytch with config from Vault
-    async function initializeStytch() {
+    async function initializeApp() {
       try {
-        const publicToken = await configService.getStytchPublicToken();
+        const [publicToken, adminBffUrl] = await Promise.all([
+          configService.getStytchPublicToken(),
+          configService.getBffAdminUrl(),
+        ]);
         const stytchClient = new StytchUIClient(publicToken);
         setStytch(stytchClient);
+        setBffUrl(adminBffUrl);
       } catch (error) {
-        console.error('Failed to initialize Stytch:', error);
+        console.error('Failed to initialize app:', error);
       } finally {
         setLoading(false);
       }
     }
 
-    initializeStytch();
+    initializeApp();
   }, []);
 
   if (loading || !stytch) {
@@ -68,25 +81,36 @@ function App() {
   return (
     <StytchProvider stytch={stytch}>
       <AuthProvider>
-        <ErrorBoundary name="AppRoot" fallback={errorFallback}>
-          <BrowserRouter>
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route path="/authenticate" element={<Login />} />
-              <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-              <Route path="/users" element={<ProtectedRoute><Users /></ProtectedRoute>} />
-              <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
-              <Route path="/categories" element={<ProtectedRoute><Categories /></ProtectedRoute>} />
-              <Route path="/content/blocks" element={<ProtectedRoute><BlockManagement /></ProtectedRoute>} />
-              <Route path="/content/manage" element={<ProtectedRoute><ContentManagement /></ProtectedRoute>} />
-              <Route path="/roles" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-              <Route path="/permissions" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-              <Route path="/api-docs" element={<ProtectedRoute><ApiDocs /></ProtectedRoute>} />
-              <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </BrowserRouter>
-        </ErrorBoundary>
+        <TenantProvider>
+          <OnboardingProvider>
+            <TelemetryProvider bffUrl={bffUrl}>
+              <ErrorBoundary name="AppRoot" fallback={errorFallback}>
+                <BrowserRouter>
+                  <Routes>
+                    <Route path="/login" element={<Login />} />
+                    <Route path="/authenticate" element={<Login />} />
+                    <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
+                    <Route path="/" element={<ProtectedRoute><OnboardingGuard><Dashboard /></OnboardingGuard></ProtectedRoute>} />
+                    <Route path="/users" element={<ProtectedRoute><OnboardingGuard><Users /></OnboardingGuard></ProtectedRoute>} />
+                    <Route path="/products" element={<ProtectedRoute><OnboardingGuard><Products /></OnboardingGuard></ProtectedRoute>} />
+                    <Route path="/categories" element={<ProtectedRoute><OnboardingGuard><Categories /></OnboardingGuard></ProtectedRoute>} />
+                    <Route path="/customers" element={<ProtectedRoute><OnboardingGuard><Customers /></OnboardingGuard></ProtectedRoute>} />
+                    <Route path="/content/blocks" element={<ProtectedRoute><OnboardingGuard><BlockManagement /></OnboardingGuard></ProtectedRoute>} />
+                    <Route path="/content/manage" element={<ProtectedRoute><OnboardingGuard><ContentManagement /></OnboardingGuard></ProtectedRoute>} />
+                    <Route path="/content/languages" element={<ProtectedRoute><OnboardingGuard><LanguageManagement /></OnboardingGuard></ProtectedRoute>} />
+                    <Route path="/roles" element={<ProtectedRoute><OnboardingGuard><Dashboard /></OnboardingGuard></ProtectedRoute>} />
+                    <Route path="/permissions" element={<ProtectedRoute><OnboardingGuard><Dashboard /></OnboardingGuard></ProtectedRoute>} />
+                    <Route path="/api-docs" element={<ProtectedRoute><OnboardingGuard><ApiDocs /></OnboardingGuard></ProtectedRoute>} />
+                    <Route path="/profile" element={<ProtectedRoute><OnboardingGuard><Profile /></OnboardingGuard></ProtectedRoute>} />
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                  </Routes>
+                </BrowserRouter>
+                {/* Tenant Selection Modal */}
+                <TenantSelector />
+              </ErrorBoundary>
+            </TelemetryProvider>
+          </OnboardingProvider>
+        </TenantProvider>
       </AuthProvider>
     </StytchProvider>
   );

@@ -86,6 +86,30 @@ public class EsbDomain
     [Column("is_active")]
     public bool IsActive { get; set; } = true;
 
+    /// <summary>
+    /// Whether this domain has a shell application
+    /// </summary>
+    [Column("has_shell")]
+    public bool HasShell { get; set; } = false;
+
+    /// <summary>
+    /// Whether this domain has a micro-frontend
+    /// </summary>
+    [Column("has_mfe")]
+    public bool HasMfe { get; set; } = false;
+
+    /// <summary>
+    /// Whether this domain has a backend-for-frontend service
+    /// </summary>
+    [Column("has_bff")]
+    public bool HasBff { get; set; } = false;
+
+    /// <summary>
+    /// Whether this domain has an anti-corruption layer service
+    /// </summary>
+    [Column("has_acl")]
+    public bool HasAcl { get; set; } = false;
+
     [Column("created_at")]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

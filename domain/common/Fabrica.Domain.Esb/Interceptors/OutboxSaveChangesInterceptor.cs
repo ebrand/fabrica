@@ -25,7 +25,7 @@ public class OutboxSaveChangesInterceptor : SaveChangesInterceptor
     // Cache for outbox configuration, keyed by "schema.table"
     private static readonly ConcurrentDictionary<string, OutboxConfigEntry> ConfigCache = new();
     private static DateTime _lastConfigRefresh = DateTime.MinValue;
-    private static readonly TimeSpan CacheRefreshInterval = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan CacheRefreshInterval = TimeSpan.FromSeconds(10);
     private static readonly object ConfigLock = new();
 
     public override InterceptionResult<int> SavingChanges(

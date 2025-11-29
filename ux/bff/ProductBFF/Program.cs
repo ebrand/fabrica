@@ -1,3 +1,5 @@
+using ProductBFF.Middleware;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services
@@ -8,17 +10,21 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("v1", new() { Title = "Product BFF API", Version = "v1" });
 });
 
+// Add HttpContextAccessor for tenant context propagation
+builder.Services.AddHttpContextAccessor();
+
 // Add HttpClient for ProductServiceClient
 builder.Services.AddHttpClient<ProductBFF.Services.ProductServiceClient>();
 
-// Add CORS
+// Add CORS - allow credentials for cookie-based tenant context
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.AllowAnyOrigin()
+        policy.SetIsOriginAllowed(_ => true)
               .AllowAnyMethod()
-              .AllowAnyHeader();
+              .AllowAnyHeader()
+              .AllowCredentials();
     });
 });
 
@@ -29,6 +35,9 @@ app.UseSwagger();
 app.UseSwaggerUI();
 
 app.UseCors();
+
+// Use tenant middleware to extract tenant context from cookies/headers
+app.UseTenantMiddleware();
 
 // Health check endpoint
 app.MapGet("/health", () => Results.Ok(new

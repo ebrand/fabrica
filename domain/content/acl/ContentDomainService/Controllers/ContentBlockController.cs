@@ -20,21 +20,85 @@ public class ContentBlockController : ControllerBase
     }
 
     /// <summary>
+    /// Checks if the caller is a System Admin via the X-Is-System-Admin header
+    /// </summary>
+    private bool IsCallerSystemAdmin()
+    {
+        return Request.Headers.TryGetValue("X-Is-System-Admin", out var value)
+            && value.FirstOrDefault()?.Equals("true", StringComparison.OrdinalIgnoreCase) == true;
+    }
+
+    /// <summary>
+    /// Gets the tenant ID from header
+    /// Returns null if empty GUID (All Tenants mode for System Admins)
+    /// </summary>
+    private string? GetHeaderTenantId()
+    {
+        if (Request.Headers.TryGetValue("X-Tenant-ID", out var headerValue))
+        {
+            var headerTenantId = headerValue.FirstOrDefault();
+            if (!string.IsNullOrEmpty(headerTenantId))
+            {
+                // Empty GUID means "All Tenants" mode - return null to skip filtering
+                if (headerTenantId == "00000000-0000-0000-0000-000000000000")
+                {
+                    _logger.LogDebug("All Tenants mode detected from header");
+                    return null;
+                }
+                return headerTenantId;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Gets the tenant ID, requiring it unless in System Admin "All Tenants" mode
+    /// Query param tenantId takes precedence for filtering (from dropdown)
+    /// </summary>
+    private (string? tenantId, bool isAllTenantsMode) GetTenantContext(string? queryTenantId)
+    {
+        var headerTenantId = GetHeaderTenantId();
+        var isAllTenantsMode = IsCallerSystemAdmin() && headerTenantId == null;
+
+        // Query param takes precedence (explicit filter from dropdown)
+        // Then fall back to header tenant
+        var effectiveTenantId = queryTenantId ?? headerTenantId;
+
+        // If we have a tenantId, use it for filtering (even in All Tenants mode)
+        if (!string.IsNullOrEmpty(effectiveTenantId))
+        {
+            return (effectiveTenantId, isAllTenantsMode);
+        }
+
+        // If in All Tenants mode with no filter, return null to show all
+        if (isAllTenantsMode)
+        {
+            return (null, true);
+        }
+
+        // Non-admin with no tenant - use default for backward compat
+        return ("tenant-test", false);
+    }
+
+    /// <summary>
     /// Get all block content for a tenant
     /// </summary>
     [HttpGet]
     public async Task<ActionResult<IEnumerable<object>>> GetBlockContents(
-        [FromQuery] string tenantId = "tenant-test",
+        [FromQuery] string? tenantId = null,
         [FromQuery] string? localeCode = "en-US",
         [FromQuery] string? blockSlug = null)
     {
         try
         {
-            // Get language ID for locale
-            var language = await _context.Languages
-                .FirstOrDefaultAsync(l => l.TenantId == tenantId && l.LocaleCode == localeCode);
+            var (effectiveTenantId, isAllTenantsMode) = GetTenantContext(tenantId);
 
-            if (language == null)
+            // For language, use a specific tenant or default
+            var languageTenantId = effectiveTenantId ?? tenantId;
+            var language = await _context.Languages
+                .FirstOrDefaultAsync(l => l.TenantId == languageTenantId && l.LocaleCode == localeCode);
+
+            if (language == null && !isAllTenantsMode)
             {
                 return BadRequest(new { error = $"Language '{localeCode}' not found for tenant" });
             }
@@ -44,7 +108,18 @@ public class ContentBlockController : ControllerBase
                 .Include(bc => bc.DefaultVariant)
                 .Include(bc => bc.SectionTranslations)
                     .ThenInclude(t => t.SectionType)
-                .Where(bc => bc.TenantId == tenantId && bc.IsActive);
+                .Where(bc => bc.IsActive);
+
+            // Apply tenant filter if a specific tenant is selected
+            if (effectiveTenantId != null)
+            {
+                query = query.Where(bc => bc.TenantId == effectiveTenantId);
+                _logger.LogInformation("Filtering block contents by tenant {TenantId}", effectiveTenantId);
+            }
+            else if (isAllTenantsMode)
+            {
+                _logger.LogInformation("System Admin viewing all block contents (All Tenants mode)");
+            }
 
             if (!string.IsNullOrEmpty(blockSlug))
             {
@@ -58,14 +133,15 @@ public class ContentBlockController : ControllerBase
             var result = contents.Select(bc => new
             {
                 bc.ContentId,
+                bc.TenantId,
                 bc.Slug,
                 bc.Name,
                 bc.Description,
                 Block = new { bc.Block!.Slug, bc.Block.Name },
                 DefaultVariant = bc.DefaultVariant != null ? new { bc.DefaultVariant.Slug, bc.DefaultVariant.Name } : null,
-                Sections = bc.SectionTranslations
+                Sections = language != null ? bc.SectionTranslations
                     .Where(t => t.LanguageId == language.Id)
-                    .ToDictionary(t => t.SectionType!.Slug, t => t.Content),
+                    .ToDictionary(t => t.SectionType!.Slug, t => t.Content) : new Dictionary<string, string?>(),
                 bc.CreatedAt,
                 bc.UpdatedAt
             });
@@ -87,7 +163,9 @@ public class ContentBlockController : ControllerBase
     {
         try
         {
-            var content = await _context.BlockContents
+            var (effectiveTenantId, isAllTenantsMode) = GetTenantContext(null);
+
+            var query = _context.BlockContents
                 .Include(bc => bc.Block)
                     .ThenInclude(b => b!.BlockSections)
                     .ThenInclude(bs => bs.SectionType)
@@ -96,7 +174,15 @@ public class ContentBlockController : ControllerBase
                     .ThenInclude(t => t.SectionType)
                 .Include(bc => bc.SectionTranslations)
                     .ThenInclude(t => t.Language)
-                .FirstOrDefaultAsync(bc => bc.ContentId == id);
+                .Where(bc => bc.ContentId == id);
+
+            // Apply tenant filter if a tenantId is provided
+            if (effectiveTenantId != null)
+            {
+                query = query.Where(bc => bc.TenantId == effectiveTenantId);
+            }
+
+            var content = await query.FirstOrDefaultAsync();
 
             if (content == null)
             {
@@ -123,7 +209,7 @@ public class ContentBlockController : ControllerBase
     [HttpGet("code/{slug}")]
     public async Task<ActionResult<object>> GetBlockContentBySlug(
         string slug,
-        [FromQuery] string tenantId = "tenant-test",
+        [FromQuery] string? tenantId = null,
         [FromQuery] string? localeCode = "en-US",
         [FromQuery] string? variant = null)
     {
@@ -209,21 +295,37 @@ public class ContentBlockController : ControllerBase
     /// </summary>
     [HttpGet("blocks")]
     public async Task<ActionResult<IEnumerable<object>>> GetBlocks(
-        [FromQuery] string tenantId = "tenant-test")
+        [FromQuery] string? tenantId = null)
     {
         try
         {
-            var blocks = await _context.Blocks
+            var (effectiveTenantId, isAllTenantsMode) = GetTenantContext(tenantId);
+
+            var query = _context.Blocks
                 .Include(b => b.BlockSections)
                     .ThenInclude(bs => bs.SectionType)
                 .Include(b => b.Variants)
-                .Where(b => b.TenantId == tenantId && b.IsActive)
+                .Where(b => b.IsActive);
+
+            // Apply tenant filter if a specific tenant is selected
+            if (effectiveTenantId != null)
+            {
+                query = query.Where(b => b.TenantId == effectiveTenantId);
+                _logger.LogInformation("Filtering blocks by tenant {TenantId}", effectiveTenantId);
+            }
+            else if (isAllTenantsMode)
+            {
+                _logger.LogInformation("System Admin viewing all blocks (All Tenants mode)");
+            }
+
+            var blocks = await query
                 .OrderBy(b => b.DisplayOrder)
                 .ToListAsync();
 
             var result = blocks.Select(b => new
             {
                 b.BlockId,
+                b.TenantId,
                 b.Name,
                 b.Slug,
                 b.Description,
@@ -266,16 +368,31 @@ public class ContentBlockController : ControllerBase
     /// </summary>
     [HttpGet("section-types")]
     public async Task<ActionResult<IEnumerable<object>>> GetSectionTypes(
-        [FromQuery] string tenantId = "tenant-test")
+        [FromQuery] string? tenantId = null)
     {
         try
         {
-            var sectionTypes = await _context.SectionTypes
-                .Where(st => st.TenantId == tenantId && st.IsActive)
+            var (effectiveTenantId, isAllTenantsMode) = GetTenantContext(tenantId);
+
+            var query = _context.SectionTypes.Where(st => st.IsActive);
+
+            // Apply tenant filter if a specific tenant is selected
+            if (effectiveTenantId != null)
+            {
+                query = query.Where(st => st.TenantId == effectiveTenantId);
+                _logger.LogInformation("Filtering section types by tenant {TenantId}", effectiveTenantId);
+            }
+            else if (isAllTenantsMode)
+            {
+                _logger.LogInformation("System Admin viewing all section types (All Tenants mode)");
+            }
+
+            var sectionTypes = await query
                 .OrderBy(st => st.DisplayOrder)
                 .Select(st => new
                 {
                     st.SectionTypeId,
+                    st.TenantId,
                     st.Name,
                     st.Slug,
                     st.Description,
@@ -293,12 +410,193 @@ public class ContentBlockController : ControllerBase
     }
 
     /// <summary>
+    /// Create a new section type
+    /// </summary>
+    [HttpPost("section-types")]
+    public async Task<ActionResult<object>> CreateSectionType([FromBody] CreateSectionTypeRequest request)
+    {
+        try
+        {
+            var tenantId = request.TenantId ?? GetHeaderTenantId() ?? "tenant-test";
+
+            // Check slug uniqueness
+            var existingSlug = await _context.SectionTypes
+                .AnyAsync(st => st.TenantId == tenantId && st.Slug == request.Slug);
+
+            if (existingSlug)
+            {
+                return BadRequest(new { error = $"Section type with slug '{request.Slug}' already exists" });
+            }
+
+            // Get max display order
+            var maxOrder = await _context.SectionTypes
+                .Where(st => st.TenantId == tenantId)
+                .MaxAsync(st => (int?)st.DisplayOrder) ?? 0;
+
+            var sectionType = new SectionType
+            {
+                TenantId = tenantId,
+                Name = request.Name,
+                Slug = request.Slug,
+                Description = request.Description,
+                FieldType = request.FieldType ?? "text",
+                ValidationRules = request.ValidationRules,
+                IsActive = true,
+                DisplayOrder = request.DisplayOrder ?? maxOrder + 1
+            };
+
+            _context.SectionTypes.Add(sectionType);
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Created section type {SectionTypeId} with slug {Slug}", sectionType.SectionTypeId, sectionType.Slug);
+
+            return CreatedAtAction(nameof(GetSectionTypes), new
+            {
+                sectionType.SectionTypeId,
+                sectionType.Name,
+                sectionType.Slug,
+                sectionType.Description,
+                sectionType.FieldType,
+                sectionType.DisplayOrder
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating section type");
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Update an existing section type
+    /// </summary>
+    [HttpPut("section-types/{id}")]
+    public async Task<ActionResult<object>> UpdateSectionType(Guid id, [FromBody] UpdateSectionTypeRequest request)
+    {
+        try
+        {
+            var (effectiveTenantId, isAllTenantsMode) = GetTenantContext(null);
+
+            var query = _context.SectionTypes.Where(st => st.SectionTypeId == id);
+
+            // Apply tenant filter if a tenantId is provided
+            if (effectiveTenantId != null)
+            {
+                query = query.Where(st => st.TenantId == effectiveTenantId);
+            }
+
+            var sectionType = await query.FirstOrDefaultAsync();
+            if (sectionType == null)
+            {
+                return NotFound(new { error = "Section type not found" });
+            }
+
+            // Check slug uniqueness if changed
+            if (!string.IsNullOrEmpty(request.Slug) && request.Slug != sectionType.Slug)
+            {
+                var existingSlug = await _context.SectionTypes
+                    .AnyAsync(st => st.TenantId == sectionType.TenantId && st.Slug == request.Slug && st.SectionTypeId != id);
+
+                if (existingSlug)
+                {
+                    return BadRequest(new { error = $"Section type with slug '{request.Slug}' already exists" });
+                }
+                sectionType.Slug = request.Slug;
+            }
+
+            if (!string.IsNullOrEmpty(request.Name)) sectionType.Name = request.Name;
+            if (request.Description != null) sectionType.Description = request.Description;
+            if (!string.IsNullOrEmpty(request.FieldType)) sectionType.FieldType = request.FieldType;
+            if (request.ValidationRules != null) sectionType.ValidationRules = request.ValidationRules;
+            if (request.DisplayOrder.HasValue) sectionType.DisplayOrder = request.DisplayOrder.Value;
+            if (request.IsActive.HasValue) sectionType.IsActive = request.IsActive.Value;
+
+            sectionType.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Updated section type {SectionTypeId}", id);
+
+            return Ok(new
+            {
+                sectionType.SectionTypeId,
+                sectionType.Name,
+                sectionType.Slug,
+                sectionType.Description,
+                sectionType.FieldType,
+                sectionType.DisplayOrder,
+                sectionType.IsActive
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating section type {SectionTypeId}", id);
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Delete a section type
+    /// </summary>
+    [HttpDelete("section-types/{id}")]
+    public async Task<ActionResult> DeleteSectionType(Guid id)
+    {
+        try
+        {
+            var (effectiveTenantId, isAllTenantsMode) = GetTenantContext(null);
+
+            var query = _context.SectionTypes
+                .Include(st => st.BlockSections)
+                .Where(st => st.SectionTypeId == id);
+
+            // Apply tenant filter if a tenantId is provided
+            if (effectiveTenantId != null)
+            {
+                query = query.Where(st => st.TenantId == effectiveTenantId);
+            }
+
+            var sectionType = await query.FirstOrDefaultAsync();
+
+            if (sectionType == null)
+            {
+                return NotFound(new { error = "Section type not found" });
+            }
+
+            // Check if in use by any blocks
+            if (sectionType.BlockSections.Any())
+            {
+                return BadRequest(new { error = $"Cannot delete section type - it is used by {sectionType.BlockSections.Count} block(s). Remove it from all blocks first." });
+            }
+
+            // Check if any translations exist
+            var hasTranslations = await _context.BlockContentSectionTranslations
+                .AnyAsync(t => t.SectionTypeId == id);
+
+            if (hasTranslations)
+            {
+                return BadRequest(new { error = "Cannot delete section type - it has content translations. Delete the content first." });
+            }
+
+            _context.SectionTypes.Remove(sectionType);
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Deleted section type {SectionTypeId}", id);
+
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting section type {SectionTypeId}", id);
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Get variants for a specific block
     /// </summary>
     [HttpGet("blocks/{blockSlug}/variants")]
     public async Task<ActionResult<IEnumerable<object>>> GetBlockVariants(
         string blockSlug,
-        [FromQuery] string tenantId = "tenant-test")
+        [FromQuery] string? tenantId = null)
     {
         try
         {
@@ -346,7 +644,7 @@ public class ContentBlockController : ControllerBase
     {
         try
         {
-            var tenantId = request.TenantId ?? "tenant-test";
+            var tenantId = request.TenantId ?? GetHeaderTenantId() ?? "tenant-test";
 
             // Validate block exists
             var block = await _context.Blocks
@@ -474,12 +772,22 @@ public class ContentBlockController : ControllerBase
     {
         try
         {
-            var blockContent = await _context.BlockContents
+            var (effectiveTenantId, isAllTenantsMode) = GetTenantContext(null);
+
+            var query = _context.BlockContents
                 .Include(bc => bc.Block)
                     .ThenInclude(b => b!.BlockSections)
                     .ThenInclude(bs => bs.SectionType)
                 .Include(bc => bc.SectionTranslations)
-                .FirstOrDefaultAsync(bc => bc.ContentId == id);
+                .Where(bc => bc.ContentId == id);
+
+            // Apply tenant filter if a tenantId is provided
+            if (effectiveTenantId != null)
+            {
+                query = query.Where(bc => bc.TenantId == effectiveTenantId);
+            }
+
+            var blockContent = await query.FirstOrDefaultAsync();
 
             if (blockContent == null)
             {
@@ -590,9 +898,19 @@ public class ContentBlockController : ControllerBase
     {
         try
         {
-            var blockContent = await _context.BlockContents
+            var (effectiveTenantId, isAllTenantsMode) = GetTenantContext(null);
+
+            var query = _context.BlockContents
                 .Include(bc => bc.SectionTranslations)
-                .FirstOrDefaultAsync(bc => bc.ContentId == id);
+                .Where(bc => bc.ContentId == id);
+
+            // Apply tenant filter if a tenantId is provided
+            if (effectiveTenantId != null)
+            {
+                query = query.Where(bc => bc.TenantId == effectiveTenantId);
+            }
+
+            var blockContent = await query.FirstOrDefaultAsync();
 
             if (blockContent == null)
             {
@@ -625,7 +943,9 @@ public class ContentBlockController : ControllerBase
     {
         try
         {
-            var content = await _context.BlockContents
+            var (effectiveTenantId, isAllTenantsMode) = GetTenantContext(null);
+
+            var query = _context.BlockContents
                 .Include(bc => bc.Block)
                     .ThenInclude(b => b!.BlockSections)
                     .ThenInclude(bs => bs.SectionType)
@@ -636,7 +956,15 @@ public class ContentBlockController : ControllerBase
                     .ThenInclude(t => t.SectionType)
                 .Include(bc => bc.SectionTranslations)
                     .ThenInclude(t => t.Language)
-                .FirstOrDefaultAsync(bc => bc.ContentId == id);
+                .Where(bc => bc.ContentId == id);
+
+            // Apply tenant filter if a tenantId is provided
+            if (effectiveTenantId != null)
+            {
+                query = query.Where(bc => bc.TenantId == effectiveTenantId);
+            }
+
+            var content = await query.FirstOrDefaultAsync();
 
             if (content == null)
             {
@@ -733,9 +1061,10 @@ public class ContentBlockController : ControllerBase
                 return BadRequest(new { error = $"Block with slug '{request.Slug}' already exists" });
             }
 
+            var tenantId = request.TenantId ?? GetHeaderTenantId() ?? "tenant-test";
             var block = new Block
             {
-                TenantId = request.TenantId ?? "tenant-test",
+                TenantId = tenantId,
                 Name = request.Name,
                 Slug = request.Slug,
                 Description = request.Description,
@@ -776,7 +1105,17 @@ public class ContentBlockController : ControllerBase
     {
         try
         {
-            var block = await _context.Blocks.FindAsync(id);
+            var (effectiveTenantId, isAllTenantsMode) = GetTenantContext(null);
+
+            var query = _context.Blocks.Where(b => b.BlockId == id);
+
+            // Apply tenant filter if a tenantId is provided
+            if (effectiveTenantId != null)
+            {
+                query = query.Where(b => b.TenantId == effectiveTenantId);
+            }
+
+            var block = await query.FirstOrDefaultAsync();
             if (block == null)
             {
                 return NotFound(new { error = "Block not found" });
@@ -831,9 +1170,19 @@ public class ContentBlockController : ControllerBase
     {
         try
         {
-            var block = await _context.Blocks
+            var (effectiveTenantId, isAllTenantsMode) = GetTenantContext(null);
+
+            var query = _context.Blocks
                 .Include(b => b.BlockContents)
-                .FirstOrDefaultAsync(b => b.BlockId == id);
+                .Where(b => b.BlockId == id);
+
+            // Apply tenant filter if a tenantId is provided
+            if (effectiveTenantId != null)
+            {
+                query = query.Where(b => b.TenantId == effectiveTenantId);
+            }
+
+            var block = await query.FirstOrDefaultAsync();
 
             if (block == null)
             {
@@ -1006,6 +1355,129 @@ public class ContentBlockController : ControllerBase
     }
 
     // ==========================================
+    // VARIANT MANAGEMENT ENDPOINTS
+    // ==========================================
+
+    /// <summary>
+    /// Create a new variant for a block
+    /// </summary>
+    [HttpPost("blocks/{blockId}/variants")]
+    public async Task<ActionResult<object>> CreateVariant(Guid blockId, [FromBody] CreateVariantRequest request)
+    {
+        try
+        {
+            var block = await _context.Blocks.FindAsync(blockId);
+            if (block == null)
+            {
+                return NotFound(new { error = "Block not found" });
+            }
+
+            // Check slug uniqueness within block
+            var existingSlug = await _context.Variants
+                .AnyAsync(v => v.BlockId == blockId && v.Slug == request.Slug);
+
+            if (existingSlug)
+            {
+                return BadRequest(new { error = $"Variant with slug '{request.Slug}' already exists on this block" });
+            }
+
+            // If this is being set as default, unset any existing default
+            if (request.IsDefault)
+            {
+                var existingDefaults = await _context.Variants
+                    .Where(v => v.BlockId == blockId && v.IsDefault)
+                    .ToListAsync();
+
+                foreach (var v in existingDefaults)
+                {
+                    v.IsDefault = false;
+                }
+            }
+
+            // Get max display order
+            var maxOrder = await _context.Variants
+                .Where(v => v.BlockId == blockId)
+                .MaxAsync(v => (int?)v.DisplayOrder) ?? 0;
+
+            var variant = new Variant
+            {
+                TenantId = block.TenantId,
+                BlockId = blockId,
+                Name = request.Name,
+                Slug = request.Slug,
+                Description = request.Description,
+                CssClass = request.CssClass,
+                PreviewImageUrl = request.PreviewImageUrl,
+                IsDefault = request.IsDefault,
+                IsActive = true,
+                DisplayOrder = request.DisplayOrder ?? maxOrder + 1
+            };
+
+            _context.Variants.Add(variant);
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Created variant {VariantId} with slug {Slug} for block {BlockId}", variant.VariantId, variant.Slug, blockId);
+
+            return CreatedAtAction(nameof(GetBlockVariants), new { blockSlug = block.Slug }, new
+            {
+                variant.VariantId,
+                variant.Name,
+                variant.Slug,
+                variant.Description,
+                variant.CssClass,
+                variant.PreviewImageUrl,
+                variant.IsDefault,
+                variant.IsActive,
+                variant.DisplayOrder
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating variant");
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Delete a variant from a block
+    /// </summary>
+    [HttpDelete("blocks/{blockId}/variants/{variantId}")]
+    public async Task<ActionResult> DeleteVariant(Guid blockId, Guid variantId)
+    {
+        try
+        {
+            var variant = await _context.Variants
+                .FirstOrDefaultAsync(v => v.VariantId == variantId && v.BlockId == blockId);
+
+            if (variant == null)
+            {
+                return NotFound(new { error = "Variant not found on this block" });
+            }
+
+            // Check if any content is using this variant as default
+            var contentUsingVariant = await _context.BlockContents
+                .AnyAsync(bc => bc.DefaultVariantId == variantId);
+
+            if (contentUsingVariant)
+            {
+                return BadRequest(new { error = "Cannot delete variant - it is being used as default by one or more content items" });
+            }
+
+            _context.Variants.Remove(variant);
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Deleted variant {VariantId} from block {BlockId}", variantId, blockId);
+
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting variant {VariantId}", variantId);
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    // ==========================================
     // REQUEST MODELS
     // ==========================================
 
@@ -1041,6 +1513,39 @@ public class ContentBlockController : ControllerBase
         public bool? IsRequired { get; set; }
         public int? DisplayOrder { get; set; }
         public string? DefaultValue { get; set; }
+    }
+
+    public class CreateVariantRequest
+    {
+        public required string Name { get; set; }
+        public required string Slug { get; set; }
+        public string? Description { get; set; }
+        public string? CssClass { get; set; }
+        public string? PreviewImageUrl { get; set; }
+        public bool IsDefault { get; set; }
+        public int? DisplayOrder { get; set; }
+    }
+
+    public class CreateSectionTypeRequest
+    {
+        public string? TenantId { get; set; }
+        public required string Name { get; set; }
+        public required string Slug { get; set; }
+        public string? Description { get; set; }
+        public string? FieldType { get; set; }
+        public string? ValidationRules { get; set; }
+        public int? DisplayOrder { get; set; }
+    }
+
+    public class UpdateSectionTypeRequest
+    {
+        public string? Name { get; set; }
+        public string? Slug { get; set; }
+        public string? Description { get; set; }
+        public string? FieldType { get; set; }
+        public string? ValidationRules { get; set; }
+        public int? DisplayOrder { get; set; }
+        public bool? IsActive { get; set; }
     }
 
     // ==========================================

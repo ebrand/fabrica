@@ -1,7 +1,9 @@
 using AdminDomainService.Data;
 using AdminDomainService.Services;
+using AdminDomainService.BackgroundServices;
 using Microsoft.EntityFrameworkCore;
 using Fabrica.Domain.Esb.Extensions;
+using Fabrica.Domain.Esb.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,19 +23,16 @@ try
 
     // Fetch secrets from Vault
     var dbData = await vaultService.GetSecretDataAsync("infrastructure/postgres");
-    var rabbitmqData = await vaultService.GetSecretDataAsync("infrastructure/rabbitmq");
+    var kafkaData = await vaultService.GetSecretDataAsync("infrastructure/kafka");
     var redisData = await vaultService.GetSecretDataAsync("infrastructure/redis");
     var consulData = await vaultService.GetSecretDataAsync("shared/consul");
 
     // Build connection string and add to configuration
     builder.Configuration["ConnectionStrings:DefaultConnection"] = $"Host={dbData["host"]};Port={dbData["port"]};Database={dbData["database"]};Username={dbData["user"]};Password={dbData["password"]}";
-    builder.Configuration["RabbitMQ:Host"] = rabbitmqData["host"]?.ToString() ?? "rabbitmq";
-    builder.Configuration["RabbitMQ:Port"] = rabbitmqData["port"]?.ToString() ?? "5672";
-    builder.Configuration["RabbitMQ:Username"] = rabbitmqData["username"]?.ToString() ?? "fabrica_admin";
-    builder.Configuration["RabbitMQ:Password"] = rabbitmqData["password"]?.ToString() ?? "";
-    builder.Configuration["Redis:ConnectionString"] = $"{redisData["host"] ?? "redis"}:{redisData["port"] ?? "6379"}";
-    builder.Configuration["Consul:Host"] = consulData["host"]?.ToString() ?? "consul";
-    builder.Configuration["Consul:Port"] = consulData["port"]?.ToString() ?? "8500";
+    builder.Configuration["Kafka:BootstrapServers"]              = kafkaData["bootstrap_servers"]?.ToString() ?? "kafka:9092";
+    builder.Configuration["Redis:ConnectionString"]              = $"{redisData["host"] ?? "redis"}:{redisData["port"] ?? "6379"}";
+    builder.Configuration["Consul:Host"]                         = consulData["host"]?.ToString() ?? "consul";
+    builder.Configuration["Consul:Port"]                         = consulData["port"]?.ToString() ?? "8500";
 
     Console.WriteLine("✅ Successfully loaded configuration from Vault");
 }
@@ -73,6 +72,37 @@ builder.Services.AddSingleton<VaultService>();
 
 // Register ConsulService for service discovery
 builder.Services.AddSingleton<ConsulService>();
+
+// Register Kafka producer service
+var kafkaBootstrapServers = builder.Configuration["Kafka:BootstrapServers"]
+    ?? Environment.GetEnvironmentVariable("KAFKA_BOOTSTRAP_SERVERS")
+    ?? "kafka:9092";
+
+builder.Services.AddSingleton(sp =>
+{
+    var logger = sp.GetRequiredService<ILogger<KafkaProducerService>>();
+    return new KafkaProducerService(kafkaBootstrapServers, "admin", logger);
+});
+
+// Register Kafka consumer service
+builder.Services.AddSingleton(sp =>
+{
+    var logger = sp.GetRequiredService<ILogger<KafkaConsumerService>>();
+    return new KafkaConsumerService(kafkaBootstrapServers, "admin", logger);
+});
+
+// Register Telemetry service for ESB monitoring
+builder.Services.AddSingleton(sp =>
+{
+    var logger = sp.GetRequiredService<ILogger<TelemetryService>>();
+    return new TelemetryService(kafkaBootstrapServers, "admin", logger);
+});
+
+// Register outbox publisher background service
+builder.Services.AddHostedService<AdminOutboxPublisher>();
+
+// Register cache subscriber background service
+builder.Services.AddHostedService<AdminCacheSubscriber>();
 
 var app = builder.Build();
 

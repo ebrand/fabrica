@@ -93,6 +93,138 @@ public class EsbController : ControllerBase
         }
     }
 
+    // GET: api/esb/domain/all - includes inactive domains
+    [HttpGet("domain/all")]
+    public async Task<ActionResult<IEnumerable<EsbDomain>>> GetAllDomains()
+    {
+        try
+        {
+            var domains = await _context.EsbDomains
+                .OrderBy(d => d.DomainName)
+                .ToListAsync();
+
+            return Ok(domains);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching all ESB domains");
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    // POST: api/esb/domain
+    [HttpPost("domain")]
+    public async Task<ActionResult<EsbDomain>> CreateDomain(CreateDomainDto dto)
+    {
+        try
+        {
+            // Check if domain with same name already exists
+            var existing = await _context.EsbDomains
+                .FirstOrDefaultAsync(d => d.DomainName == dto.DomainName);
+
+            if (existing != null)
+            {
+                return Conflict(new { error = $"Domain '{dto.DomainName}' already exists" });
+            }
+
+            var domain = new EsbDomain
+            {
+                DomainName = dto.DomainName,
+                DisplayName = dto.DisplayName,
+                Description = dto.Description,
+                ServiceUrl = dto.ServiceUrl,
+                KafkaTopicPrefix = dto.KafkaTopicPrefix ?? dto.DomainName,
+                SchemaName = dto.SchemaName ?? "fabrica",
+                DatabaseName = dto.DatabaseName ?? $"fabrica-{dto.DomainName}-db",
+                PublishesEvents = dto.PublishesEvents,
+                ConsumesEvents = dto.ConsumesEvents,
+                IsActive = dto.IsActive,
+                HasShell = dto.HasShell,
+                HasMfe = dto.HasMfe,
+                HasBff = dto.HasBff,
+                HasAcl = dto.HasAcl,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            _context.EsbDomains.Add(domain);
+            await _context.SaveChangesAsync();
+
+            return CreatedAtAction(nameof(GetDomain), new { domainName = domain.DomainName }, domain);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating domain");
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    // PUT: api/esb/domain/{id}
+    [HttpPut("domain/{id}")]
+    public async Task<ActionResult<EsbDomain>> UpdateDomain(Guid id, UpdateDomainDto dto)
+    {
+        try
+        {
+            var domain = await _context.EsbDomains.FindAsync(id);
+
+            if (domain == null)
+            {
+                return NotFound(new { error = "Domain not found" });
+            }
+
+            // Update fields if provided
+            if (dto.DisplayName != null) domain.DisplayName = dto.DisplayName;
+            if (dto.Description != null) domain.Description = dto.Description;
+            if (dto.ServiceUrl != null) domain.ServiceUrl = dto.ServiceUrl;
+            if (dto.KafkaTopicPrefix != null) domain.KafkaTopicPrefix = dto.KafkaTopicPrefix;
+            if (dto.SchemaName != null) domain.SchemaName = dto.SchemaName;
+            if (dto.DatabaseName != null) domain.DatabaseName = dto.DatabaseName;
+            if (dto.PublishesEvents.HasValue) domain.PublishesEvents = dto.PublishesEvents.Value;
+            if (dto.ConsumesEvents.HasValue) domain.ConsumesEvents = dto.ConsumesEvents.Value;
+            if (dto.IsActive.HasValue) domain.IsActive = dto.IsActive.Value;
+            if (dto.HasShell.HasValue) domain.HasShell = dto.HasShell.Value;
+            if (dto.HasMfe.HasValue) domain.HasMfe = dto.HasMfe.Value;
+            if (dto.HasBff.HasValue) domain.HasBff = dto.HasBff.Value;
+            if (dto.HasAcl.HasValue) domain.HasAcl = dto.HasAcl.Value;
+
+            domain.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(domain);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating domain {Id}", id);
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    // DELETE: api/esb/domain/{id}
+    [HttpDelete("domain/{id}")]
+    public async Task<IActionResult> DeleteDomain(Guid id)
+    {
+        try
+        {
+            var domain = await _context.EsbDomains.FindAsync(id);
+
+            if (domain == null)
+            {
+                return NotFound(new { error = "Domain not found" });
+            }
+
+            _context.EsbDomains.Remove(domain);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Domain deleted successfully", id, domainName = domain.DomainName });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting domain {Id}", id);
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     // ==================== Outbox Config (Publishing) ====================
     // Note: Admin service can only manage admin domain's outbox config directly
     // Other domains must implement their own endpoints
@@ -560,4 +692,39 @@ public class TableInfoDto
     public string SchemaName { get; set; } = string.Empty;
     public string TableName { get; set; } = string.Empty;
     public string? Description { get; set; }
+}
+
+public class CreateDomainDto
+{
+    public string DomainName { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string? ServiceUrl { get; set; }
+    public string? KafkaTopicPrefix { get; set; }
+    public string? SchemaName { get; set; }
+    public string? DatabaseName { get; set; }
+    public bool PublishesEvents { get; set; } = true;
+    public bool ConsumesEvents { get; set; } = true;
+    public bool IsActive { get; set; } = true;
+    public bool HasShell { get; set; } = false;
+    public bool HasMfe { get; set; } = false;
+    public bool HasBff { get; set; } = false;
+    public bool HasAcl { get; set; } = false;
+}
+
+public class UpdateDomainDto
+{
+    public string? DisplayName { get; set; }
+    public string? Description { get; set; }
+    public string? ServiceUrl { get; set; }
+    public string? KafkaTopicPrefix { get; set; }
+    public string? SchemaName { get; set; }
+    public string? DatabaseName { get; set; }
+    public bool? PublishesEvents { get; set; }
+    public bool? ConsumesEvents { get; set; }
+    public bool? IsActive { get; set; }
+    public bool? HasShell { get; set; }
+    public bool? HasMfe { get; set; }
+    public bool? HasBff { get; set; }
+    public bool? HasAcl { get; set; }
 }

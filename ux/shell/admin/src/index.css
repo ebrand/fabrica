@@ -20,3 +20,5 @@
 
 /* Common width classes for Select and other components */
 @source inline("w-24 w-32 w-40 w-48 w-56 w-64 max-w-xs");
+
+@source inline("text-gray-200 bg-purple-900/40 ring-1 ring-purple-500/50")

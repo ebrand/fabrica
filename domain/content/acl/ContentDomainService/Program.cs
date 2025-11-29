@@ -1,7 +1,10 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
 using ContentDomainService.Data;
+using ContentDomainService.BackgroundServices;
 using System.Text.Json;
 using Fabrica.Domain.Esb.Extensions;
+using Fabrica.Domain.Esb.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,6 +18,9 @@ builder.Services.AddHttpClient();
 
 // Retrieve database connection string from ACL Admin service
 var connectionString = await GetDatabaseConnectionStringAsync(builder.Configuration);
+
+// Store connection string in configuration for background services
+builder.Configuration["ConnectionStrings:DefaultConnection"] = connectionString;
 
 // Add DbContext with outbox interceptor
 builder.Services.AddDbContext<ContentDbContext>(options =>
@@ -33,6 +39,38 @@ builder.Services.AddCors(options =>
         });
 });
 
+// Configure Kafka
+var kafkaBootstrapServers = builder.Configuration["Kafka:BootstrapServers"]
+    ?? Environment.GetEnvironmentVariable("KAFKA_BOOTSTRAP_SERVERS")
+    ?? "kafka:9092";
+
+// Register Kafka producer service
+builder.Services.AddSingleton(sp =>
+{
+    var logger = sp.GetRequiredService<ILogger<KafkaProducerService>>();
+    return new KafkaProducerService(kafkaBootstrapServers, "content", logger);
+});
+
+// Register Kafka consumer service
+builder.Services.AddSingleton(sp =>
+{
+    var logger = sp.GetRequiredService<ILogger<KafkaConsumerService>>();
+    return new KafkaConsumerService(kafkaBootstrapServers, "content", logger);
+});
+
+// Register Telemetry service for ESB monitoring
+builder.Services.AddSingleton(sp =>
+{
+    var logger = sp.GetRequiredService<ILogger<TelemetryService>>();
+    return new TelemetryService(kafkaBootstrapServers, "content", logger);
+});
+
+// Register outbox publisher background service
+builder.Services.AddHostedService<ContentOutboxPublisher>();
+
+// Register cache subscriber background service
+builder.Services.AddHostedService<ContentCacheSubscriber>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -43,6 +81,18 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors("AllowAll");
+
+// Serve uploaded files
+var uploadPath = builder.Configuration["UPLOAD_PATH"] ?? "/app/uploads";
+if (!Directory.Exists(uploadPath))
+{
+    Directory.CreateDirectory(uploadPath);
+}
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(uploadPath),
+    RequestPath = "/uploads"
+});
 
 app.UseAuthorization();
 

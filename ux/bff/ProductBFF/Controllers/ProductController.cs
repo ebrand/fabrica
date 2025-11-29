@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using ProductBFF.Services;
+using ProductBFF.Middleware;
 using System.Text;
 using System.Text.Json;
 
@@ -18,12 +19,25 @@ public class ProductController : ControllerBase
         _logger = logger;
     }
 
+    private string? GetTenantId() => HttpContext.Items["TenantId"]?.ToString();
+    private bool IsAllTenantsMode() => HttpContext.IsAllTenantsMode();
+
     [HttpGet]
-    public async Task<IActionResult> GetProducts([FromQuery] Guid? tenantId = null, [FromQuery] string? status = null)
+    public async Task<IActionResult> GetProducts([FromQuery] string? status = null, [FromQuery] Guid? tenantId = null)
     {
         try
         {
-            var response = await _productService.GetProductsAsync(tenantId, status);
+            var contextTenantId = GetTenantId();
+            var isAllTenants = IsAllTenantsMode();
+
+            // Allow "All Tenants" mode for System Admins, otherwise require tenant
+            if (string.IsNullOrEmpty(contextTenantId) && !isAllTenants)
+            {
+                return BadRequest(new { error = "Tenant context required" });
+            }
+
+            // If tenantId filter is explicitly provided (from dropdown), use that
+            var response = await _productService.GetProductsAsync(status, tenantId);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -69,7 +83,20 @@ public class ProductController : ControllerBase
     {
         try
         {
-            var content = new StringContent(body.GetRawText(), Encoding.UTF8, "application/json");
+            var tenantId = GetTenantId();
+            if (string.IsNullOrEmpty(tenantId))
+            {
+                return BadRequest(new { error = "Tenant context required" });
+            }
+
+            // Inject tenantId from context
+            var bodyDict = JsonSerializer.Deserialize<Dictionary<string, object>>(body.GetRawText());
+            if (bodyDict != null)
+            {
+                bodyDict["tenantId"] = tenantId;
+            }
+            var modifiedBody = JsonSerializer.Serialize(bodyDict);
+            var content = new StringContent(modifiedBody, Encoding.UTF8, "application/json");
             var response = await _productService.CreateProductAsync(content);
 
             if (!response.IsSuccessStatusCode)
@@ -78,8 +105,9 @@ public class ProductController : ControllerBase
                 return StatusCode((int)response.StatusCode, new { error });
             }
 
-            var product = await response.Content.ReadFromJsonAsync<object>();
-            return CreatedAtAction(nameof(GetProductById), new { id = product }, product);
+            var product = await response.Content.ReadFromJsonAsync<JsonElement>();
+            var productId = product.GetProperty("id").GetGuid();
+            return CreatedAtAction(nameof(GetProductById), new { id = productId }, product);
         }
         catch (Exception ex)
         {

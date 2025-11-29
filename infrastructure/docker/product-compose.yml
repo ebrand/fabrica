@@ -49,16 +49,8 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
       - ASPNETCORE_URLS=http://+:3420
+      # Only AdminACL URL - all other config fetched via service discovery
       - AclAdmin__Url=http://acl-admin:3600
-      # Fallback values if ACL Admin is unavailable
-      - ConnectionStrings__ProductDb=Host=postgres;Port=5432;Database=fabrica-product-db;Username=${POSTGRES_USER:-fabrica_admin};Password=${POSTGRES_PASSWORD:-fabrica_dev_password}
-      - RabbitMQ__Host=rabbitmq
-      - RabbitMQ__Port=5672
-      - RabbitMQ__Username=${RABBITMQ_USER:-fabrica_admin}
-      - RabbitMQ__Password=${RABBITMQ_PASSWORD:-fabrica_dev_password}
-      - Redis__ConnectionString=redis:6379
-      - Consul__Host=consul
-      - Consul__Port=8500
     ports:
       - "3420:3420"
     networks:
@@ -82,56 +74,56 @@ services:
       retries: 3
       start_period: 40s
 
-  # Product ESB Consumer Service
-  esb-product-consumer:
-    build:
-      context: ../../domain/product/esb/ProductConsumerService
-      dockerfile: Dockerfile
-    container_name: esb-product-consumer
-    environment:
-      - NODE_ENV=${NODE_ENV:-development}
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-fabrica_admin}:${POSTGRES_PASSWORD:-fabrica_dev_password}@postgres:5432/fabrica-product-db
-      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-fabrica_admin}:${RABBITMQ_PASSWORD:-fabrica_dev_password}@rabbitmq:5672
-      - CONSUL_HOST=consul
-      - CONSUL_PORT=8500
-    networks:
-      - fabrica-network
-    depends_on:
-      product-db-init:
-        condition: service_completed_successfully
-      rabbitmq:
-        condition: service_healthy
-      consul:
-        condition: service_healthy
-    volumes:
-      - ../../domain/product/esb/ProductConsumerService:/app
-      - /app/node_modules
-    restart: unless-stopped
+  # Product ESB Consumer Service (not yet implemented)
+  # esb-product-consumer:
+  #   build:
+  #     context: ../../domain/product/esb/ProductConsumerService
+  #     dockerfile: Dockerfile
+  #   container_name: esb-product-consumer
+  #   environment:
+  #     - NODE_ENV=${NODE_ENV:-development}
+  #     - DATABASE_URL=postgresql://${POSTGRES_USER:-fabrica_admin}:${POSTGRES_PASSWORD:-fabrica_dev_password}@postgres:5432/fabrica-product-db
+  #     - RABBITMQ_URL=amqp://${RABBITMQ_USER:-fabrica_admin}:${RABBITMQ_PASSWORD:-fabrica_dev_password}@rabbitmq:5672
+  #     - CONSUL_HOST=consul
+  #     - CONSUL_PORT=8500
+  #   networks:
+  #     - fabrica-network
+  #   depends_on:
+  #     product-db-init:
+  #       condition: service_completed_successfully
+  #     rabbitmq:
+  #       condition: service_healthy
+  #     consul:
+  #       condition: service_healthy
+  #   volumes:
+  #     - ../../domain/product/esb/ProductConsumerService:/app
+  #     - /app/node_modules
+  #   restart: unless-stopped
 
-  # Product ESB Producer Service
-  esb-product-producer:
-    build:
-      context: ../../domain/product/esb/ProductProducerService
-      dockerfile: Dockerfile
-    container_name: esb-product-producer
-    environment:
-      - NODE_ENV=${NODE_ENV:-development}
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-fabrica_admin}:${POSTGRES_PASSWORD:-fabrica_dev_password}@postgres:5432/fabrica-product-db
-      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-fabrica_admin}:${RABBITMQ_PASSWORD:-fabrica_dev_password}@rabbitmq:5672
-      - CONSUL_HOST=consul
-      - CONSUL_PORT=8500
-    networks:
-      - fabrica-network
-    depends_on:
-      product-db-init:
-        condition: service_completed_successfully
-      rabbitmq:
-        condition: service_healthy
-      consul:
-        condition: service_healthy
-    volumes:
-      - ../../domain/product/esb/ProductProducerService:/app
-      - /app/node_modules
-    restart: unless-stopped
+  # Product ESB Producer Service (not yet implemented)
+  # esb-product-producer:
+  #   build:
+  #     context: ../../domain/product/esb/ProductProducerService
+  #     dockerfile: Dockerfile
+  #   container_name: esb-product-producer
+  #   environment:
+  #     - NODE_ENV=${NODE_ENV:-development}
+  #     - DATABASE_URL=postgresql://${POSTGRES_USER:-fabrica_admin}:${POSTGRES_PASSWORD:-fabrica_dev_password}@postgres:5432/fabrica-product-db
+  #     - RABBITMQ_URL=amqp://${RABBITMQ_USER:-fabrica_admin}:${RABBITMQ_PASSWORD:-fabrica_dev_password}@rabbitmq:5672
+  #     - CONSUL_HOST=consul
+  #     - CONSUL_PORT=8500
+  #   networks:
+  #     - fabrica-network
+  #   depends_on:
+  #     product-db-init:
+  #       condition: service_completed_successfully
+  #     rabbitmq:
+  #       condition: service_healthy
+  #     consul:
+  #       condition: service_healthy
+  #   volumes:
+  #     - ../../domain/product/esb/ProductProducerService:/app
+  #     - /app/node_modules
+  #   restart: unless-stopped
 
 # Network is inherited from the master fabrica-compose.yml file

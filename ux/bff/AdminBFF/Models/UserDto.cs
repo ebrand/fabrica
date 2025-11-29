@@ -10,12 +10,24 @@ public class UserDto
     public string? DisplayName { get; set; }
     public string? FirstName { get; set; }
     public string? LastName { get; set; }
+    public Guid? AvatarMediaId { get; set; }
     public bool IsActive { get; set; }
     public bool IsSystemAdmin { get; set; }
     public string? StytchUserId { get; set; }
     public DateTime? LastLoginAt { get; set; }
     public DateTime? CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public string? TenantRole { get; set; }
+    public List<UserTenantInfo>? Tenants { get; set; }
+}
+
+/// <summary>
+/// User's tenant membership info
+/// </summary>
+public class UserTenantInfo
+{
+    public string? Name { get; set; }
+    public string? Role { get; set; }
 }
 
 /// <summary>
@@ -28,6 +40,7 @@ public class UserDetailDto
     public string? FirstName { get; set; }
     public string? LastName { get; set; }
     public string? DisplayName { get; set; }
+    public Guid? AvatarMediaId { get; set; }
     public bool IsActive { get; set; }
     public bool IsSystemAdmin { get; set; }
     public string? StytchUserId { get; set; }
@@ -45,6 +58,7 @@ public class CreateUserRequest
     public string? FirstName { get; set; }
     public string? LastName { get; set; }
     public string? DisplayName { get; set; }
+    public Guid? AvatarMediaId { get; set; }
     public bool IsActive { get; set; } = true;
     public bool IsSystemAdmin { get; set; } = false;
 }
@@ -58,6 +72,7 @@ public class UpdateUserRequest
     public string? FirstName { get; set; }
     public string? LastName { get; set; }
     public string? DisplayName { get; set; }
+    public Guid? AvatarMediaId { get; set; }
     public bool? IsActive { get; set; }
     public bool? IsSystemAdmin { get; set; }
 }
@@ -72,12 +87,15 @@ public class AclUserResponse
     public string? FirstName { get; set; }
     public string? LastName { get; set; }
     public string? DisplayName { get; set; }
+    public Guid? AvatarMediaId { get; set; }
     public bool IsActive { get; set; }
     public bool IsSystemAdmin { get; set; }
     public string? StytchUserId { get; set; }
     public DateTime? LastLoginAt { get; set; }
     public DateTime? CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public string? TenantRole { get; set; }
+    public List<UserTenantInfo>? Tenants { get; set; }
 }
 
 public class UserName
@@ -95,6 +113,7 @@ public class AclCreateUserPayload
     public string? FirstName { get; set; }
     public string? LastName { get; set; }
     public string? DisplayName { get; set; }
+    public Guid? AvatarMediaId { get; set; }
     public bool IsActive { get; set; }
     public bool IsSystemAdmin { get; set; }
 }
@@ -108,6 +127,7 @@ public class AclUpdateUserPayload
     public string? FirstName { get; set; }
     public string? LastName { get; set; }
     public string? DisplayName { get; set; }
+    public Guid? AvatarMediaId { get; set; }
     public bool? IsActive { get; set; }
     public bool? IsSystemAdmin { get; set; }
 }

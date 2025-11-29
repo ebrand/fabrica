@@ -18,7 +18,7 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      - ../../domain/admin/database/init:/docker-entrypoint-initdb.d:ro
+      - ../../domain/admin/database:/docker-entrypoint-initdb.d:ro
     entrypoint: >
       sh -c "
         echo 'Initializing Admin domain database...' &&
@@ -83,59 +83,56 @@ services:
       retries: 3
       start_period: 40s
 
-  # Admin ESB Consumer Service
-  # Consumes events from the ESB for the Admin domain
-  esb-admin-consumer:
-    build:
-      context: ../../domain/admin/esb/AdminConsumerService
-      dockerfile: Dockerfile
-    container_name: esb-admin-consumer
-    environment:
-      - NODE_ENV=${NODE_ENV:-development}
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-fabrica_admin}:${POSTGRES_PASSWORD:-fabrica_dev_password}@postgres:5432/fabrica-admin-db
-      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-fabrica_admin}:${RABBITMQ_PASSWORD:-fabrica_dev_password}@rabbitmq:5672
-      - CONSUL_HOST=consul
-      - CONSUL_PORT=8500
-    networks:
-      - fabrica-network
-    depends_on:
-      admin-db-init:
-        condition: service_completed_successfully
-      rabbitmq:
-        condition: service_healthy
-      consul:
-        condition: service_healthy
-    volumes:
-      - ../../domain/admin/esb/AdminConsumerService:/app
-      - /app/node_modules
-    restart: unless-stopped
+  # Admin ESB Consumer Service (not yet implemented)
+  # esb-admin-consumer:
+  #   build:
+  #     context: ../../domain/admin/esb/AdminConsumerService
+  #     dockerfile: Dockerfile
+  #   container_name: esb-admin-consumer
+  #   environment:
+  #     - NODE_ENV=${NODE_ENV:-development}
+  #     - DATABASE_URL=postgresql://${POSTGRES_USER:-fabrica_admin}:${POSTGRES_PASSWORD:-fabrica_dev_password}@postgres:5432/fabrica-admin-db
+  #     - RABBITMQ_URL=amqp://${RABBITMQ_USER:-fabrica_admin}:${RABBITMQ_PASSWORD:-fabrica_dev_password}@rabbitmq:5672
+  #     - CONSUL_HOST=consul
+  #     - CONSUL_PORT=8500
+  #   networks:
+  #     - fabrica-network
+  #   depends_on:
+  #     admin-db-init:
+  #       condition: service_completed_successfully
+  #     rabbitmq:
+  #       condition: service_healthy
+  #     consul:
+  #       condition: service_healthy
+  #   volumes:
+  #     - ../../domain/admin/esb/AdminConsumerService:/app
+  #     - /app/node_modules
+  #   restart: unless-stopped
 
-  # Admin ESB Producer Service
-  # Publishes events from the Admin domain to the ESB
-  # Monitors the cdc.outbox table and publishes events
-  esb-admin-producer:
-    build:
-      context: ../../domain/admin/esb/AdminProducerService
-      dockerfile: Dockerfile
-    container_name: esb-admin-producer
-    environment:
-      - NODE_ENV=${NODE_ENV:-development}
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-fabrica_admin}:${POSTGRES_PASSWORD:-fabrica_dev_password}@postgres:5432/fabrica-admin-db
-      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-fabrica_admin}:${RABBITMQ_PASSWORD:-fabrica_dev_password}@rabbitmq:5672
-      - CONSUL_HOST=consul
-      - CONSUL_PORT=8500
-    networks:
-      - fabrica-network
-    depends_on:
-      admin-db-init:
-        condition: service_completed_successfully
-      rabbitmq:
-        condition: service_healthy
-      consul:
-        condition: service_healthy
-    volumes:
-      - ../../domain/admin/esb/AdminProducerService:/app
-      - /app/node_modules
-    restart: unless-stopped
+  # Admin ESB Producer Service (not yet implemented)
+  # esb-admin-producer:
+  #   build:
+  #     context: ../../domain/admin/esb/AdminProducerService
+  #     dockerfile: Dockerfile
+  #   container_name: esb-admin-producer
+  #   environment:
+  #     - NODE_ENV=${NODE_ENV:-development}
+  #     - DATABASE_URL=postgresql://${POSTGRES_USER:-fabrica_admin}:${POSTGRES_PASSWORD:-fabrica_dev_password}@postgres:5432/fabrica-admin-db
+  #     - RABBITMQ_URL=amqp://${RABBITMQ_USER:-fabrica_admin}:${RABBITMQ_PASSWORD:-fabrica_dev_password}@rabbitmq:5672
+  #     - CONSUL_HOST=consul
+  #     - CONSUL_PORT=8500
+  #   networks:
+  #     - fabrica-network
+  #   depends_on:
+  #     admin-db-init:
+  #       condition: service_completed_successfully
+  #     rabbitmq:
+  #       condition: service_healthy
+  #     consul:
+  #       condition: service_healthy
+  #   volumes:
+  #     - ../../domain/admin/esb/AdminProducerService:/app
+  #     - /app/node_modules
+  #   restart: unless-stopped
 
 # Network is inherited from the master fabrica-compose.yml file

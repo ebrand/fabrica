@@ -1,4 +1,5 @@
 using ContentBFF.Services;
+using ContentBFF.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,19 +18,23 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-// Add CORS - allow any origin, method, and header
+// Add CORS - allow credentials for cookie-based auth/tenant context
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.AllowAnyOrigin()
+        policy.SetIsOriginAllowed(_ => true)
               .AllowAnyMethod()
-              .AllowAnyHeader();
+              .AllowAnyHeader()
+              .AllowCredentials();
     });
 });
 
 // Add IHttpClientFactory for all services
 builder.Services.AddHttpClient();
+
+// Add IHttpContextAccessor for accessing HTTP context in services
+builder.Services.AddHttpContextAccessor();
 
 // Add HTTP client for ContentServiceClient
 builder.Services.AddHttpClient<ContentServiceClient>();
@@ -54,6 +59,9 @@ if (app.Environment.IsDevelopment())
 
 // Use CORS
 app.UseCors();
+
+// Use tenant middleware to extract tenant context from cookies/headers
+app.UseTenantMiddleware();
 
 // Map controllers
 app.MapControllers();

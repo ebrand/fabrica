@@ -49,16 +49,10 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
       - ASPNETCORE_URLS=http://+:3460
+      # Only AdminACL URL - all other config fetched via service discovery
       - AclAdmin__Url=http://acl-admin:3600
-      # Fallback values if ACL Admin is unavailable
-      - ConnectionStrings__ContentDb=Host=postgres;Port=5432;Database=fabrica-content-db;Username=${POSTGRES_USER:-fabrica_admin};Password=${POSTGRES_PASSWORD:-fabrica_dev_password}
-      - RabbitMQ__Host=rabbitmq
-      - RabbitMQ__Port=5672
-      - RabbitMQ__Username=${RABBITMQ_USER:-fabrica_admin}
-      - RabbitMQ__Password=${RABBITMQ_PASSWORD:-fabrica_dev_password}
-      - Redis__ConnectionString=redis:6379
-      - Consul__Host=consul
-      - Consul__Port=8500
+    volumes:
+      - content-uploads:/app/uploads
     ports:
       - "3460:3460"
     networks:
@@ -93,7 +87,8 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
       - ASPNETCORE_URLS=http://+:3240
-      - CONTENT_SERVICE_URL=http://acl-content:3460
+      # Only AdminACL URL - all other URLs fetched via service discovery
+      - ADMIN_SERVICE_URL=http://acl-admin:3600
     ports:
       - "3240:3240"
     networks:
@@ -133,3 +128,8 @@ services:
       start_period: 30s
 
 # Network is inherited from the master fabrica-compose.yml file
+
+# Named volumes for persistent data
+volumes:
+  content-uploads:
+    name: fabrica-content-uploads

@@ -30,20 +30,20 @@ include:
   - path: ./content-compose.yml
     env_file: ./.env
 
-  - path: ./finance-compose.yml
-    env_file: ./.env
+  # - path: ./finance-compose.yml  # Not yet implemented
+  #   env_file: ./.env
 
-  - path: ./fulfillment-compose.yml
-    env_file: ./.env
+  # - path: ./fulfillment-compose.yml  # Not yet implemented
+  #   env_file: ./.env
 
-  - path: ./legal-compose.yml
-    env_file: ./.env
+  # - path: ./legal-compose.yml  # Not yet implemented
+  #   env_file: ./.env
 
-  - path: ./order-mgmt-compose.yml
-    env_file: ./.env
+  # - path: ./order-mgmt-compose.yml  # Not yet implemented
+  #   env_file: ./.env
 
   - path: ./product-compose.yml
     env_file: ./.env
 
-  - path: ./sales-mktg-compose.yml
-    env_file: ./.env
+  # - path: ./sales-mktg-compose.yml  # Not yet implemented
+  #   env_file: ./.env

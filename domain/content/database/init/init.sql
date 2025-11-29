@@ -87,6 +87,7 @@ CREATE TABLE fabrica.block_section (
 -- Visual variants for each block (Article→Long Form, Summary; Card→Dark, Hero)
 CREATE TABLE fabrica.variant (
     variant_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id VARCHAR(100) NOT NULL,          -- Tenant ID for ESB outbox support
     block_id UUID NOT NULL REFERENCES fabrica.block(block_id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,               -- Display name: "Long Form", "Hero"
     slug VARCHAR(100) NOT NULL,               -- Identifier: "long-form", "hero"
@@ -419,6 +420,7 @@ CREATE INDEX idx_section_type_slug ON fabrica.section_type(tenant_id, slug);
 CREATE INDEX idx_block_section_block ON fabrica.block_section(block_id);
 CREATE INDEX idx_block_section_section ON fabrica.block_section(section_type_id);
 
+CREATE INDEX idx_variant_tenant ON fabrica.variant(tenant_id);
 CREATE INDEX idx_variant_block ON fabrica.variant(block_id);
 CREATE INDEX idx_variant_slug ON fabrica.variant(block_id, slug);
 CREATE INDEX idx_variant_default ON fabrica.variant(block_id, is_default);
@@ -613,15 +615,15 @@ BEGIN
     SELECT block_id INTO v_card_id FROM fabrica.block WHERE tenant_id = 'tenant-test' AND slug = 'card';
 
     -- Article variants
-    INSERT INTO fabrica.variant (block_id, name, slug, description, css_class, is_default, display_order) VALUES
-    (v_article_id, 'Long Form', 'long-form', 'Full article with all sections visible', 'article-long-form', true, 1),
-    (v_article_id, 'Summary', 'summary', 'Condensed view with title and excerpt', 'article-summary', false, 2);
+    INSERT INTO fabrica.variant (tenant_id, block_id, name, slug, description, css_class, is_default, display_order) VALUES
+    ('tenant-test', v_article_id, 'Long Form', 'long-form', 'Full article with all sections visible', 'article-long-form', true, 1),
+    ('tenant-test', v_article_id, 'Summary', 'summary', 'Condensed view with title and excerpt', 'article-summary', false, 2);
 
     -- Card variants
-    INSERT INTO fabrica.variant (block_id, name, slug, description, css_class, is_default, display_order) VALUES
-    (v_card_id, 'Default', 'default', 'Standard card layout', 'card-default', true, 1),
-    (v_card_id, 'Hero', 'hero', 'Full-width hero card', 'card-hero', false, 2),
-    (v_card_id, 'Dark', 'dark', 'Dark background card', 'card-dark', false, 3);
+    INSERT INTO fabrica.variant (tenant_id, block_id, name, slug, description, css_class, is_default, display_order) VALUES
+    ('tenant-test', v_card_id, 'Default', 'default', 'Standard card layout', 'card-default', true, 1),
+    ('tenant-test', v_card_id, 'Hero', 'hero', 'Full-width hero card', 'card-hero', false, 2),
+    ('tenant-test', v_card_id, 'Dark', 'dark', 'Dark background card', 'card-dark', false, 3);
 END $$;
 
 -- Insert sample block content with translations
@@ -805,3 +807,20 @@ COMMENT ON TABLE cdc.outbox IS 'Outbox for CDC/event publishing';
 COMMENT ON TABLE cdc.outbox_config IS 'Configuration for CDC outbox pattern';
 COMMENT ON TABLE cache.cache IS 'Local cache of data from other domains';
 COMMENT ON TABLE cache.cache_config IS 'Configuration for consuming events from other domains';
+
+-- ============================================================================
+-- OUTBOX NOTIFY TRIGGER
+-- Notifies the outbox_events channel when new outbox entries are created
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION cdc.notify_outbox_insert()
+RETURNS TRIGGER AS $$
+BEGIN
+    PERFORM pg_notify('outbox_events', NEW.id::text);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER outbox_notify_trigger
+    AFTER INSERT ON cdc.outbox
+    FOR EACH ROW EXECUTE FUNCTION cdc.notify_outbox_insert();

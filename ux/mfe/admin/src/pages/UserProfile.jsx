@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import configService from '../services/config';
 import UserEditor from '../components/UserEditor';
@@ -11,40 +11,84 @@ function UserProfile({ user, syncedUser, onProfileUpdate }) {
   const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
 
+  // Use ref to track if we've fetched fresh data (avoids closure issues)
+  const hasFetchedRef = useRef(false);
+
   useEffect(() => {
+    const initializeProfile = async () => {
+      // Skip if we already have fresh data - don't overwrite with potentially stale data
+      if (hasFetchedRef.current) {
+        return;
+      }
+
+      try {
+        setLoading(true);
+        const url = await configService.getBffAdminUrl();
+        setBffUrl(url);
+
+        const dbUserId = syncedUser?.userId;
+        setUserId(dbUserId);
+
+        // Fetch fresh user data from API to ensure we have latest avatar, etc.
+        if (dbUserId && url) {
+          try {
+            const response = await axios.get(`${url}/api/users/${dbUserId}`, { withCredentials: true });
+            const freshUser = response.data;
+
+            setUserData({
+              userId: freshUser.userId,
+              email: freshUser.email,
+              firstName: freshUser.firstName,
+              lastName: freshUser.lastName,
+              displayName: freshUser.displayName,
+              avatarMediaId: freshUser.avatarMediaId,
+              isActive: freshUser.isActive ?? true,
+              isSystemAdmin: freshUser.isSystemAdmin ?? false,
+              lastLoginAt: freshUser.lastLoginAt
+            });
+            hasFetchedRef.current = true;
+          } catch (fetchErr) {
+            // Fall back to syncedUser if API fetch fails
+            setUserData({
+              userId: dbUserId,
+              email: syncedUser?.email || user?.emails?.[0]?.email || '',
+              firstName: syncedUser?.firstName || user?.name?.first_name || '',
+              lastName: syncedUser?.lastName || user?.name?.last_name || '',
+              displayName: syncedUser?.displayName || '',
+              avatarMediaId: syncedUser?.avatarMediaId,
+              isActive: syncedUser?.isActive ?? true,
+              isSystemAdmin: syncedUser?.isSystemAdmin ?? false,
+              lastLoginAt: syncedUser?.lastLoginAt
+            });
+          }
+        } else {
+          // No userId yet, use what we have from syncedUser/Stytch
+          const email = syncedUser?.email || user?.emails?.[0]?.email || '';
+          const firstName = syncedUser?.firstName || user?.name?.first_name || '';
+          const lastName = syncedUser?.lastName || user?.name?.last_name || '';
+          const displayName = syncedUser?.displayName || `${firstName} ${lastName}`.trim() || '';
+
+          setUserData({
+            userId: dbUserId,
+            email,
+            firstName,
+            lastName,
+            displayName,
+            avatarMediaId: syncedUser?.avatarMediaId,
+            isActive: syncedUser?.isActive ?? true,
+            isSystemAdmin: syncedUser?.isSystemAdmin ?? false,
+            lastLoginAt: syncedUser?.lastLoginAt
+          });
+        }
+      } catch (err) {
+        setError('Failed to initialize profile');
+      } finally {
+        setLoading(false);
+      }
+    };
+
     initializeProfile();
   }, [user, syncedUser]);
-
-  const initializeProfile = async () => {
-    try {
-      setLoading(true);
-      const url = await configService.getBffAdminUrl();
-      setBffUrl(url);
-
-      // Build user data from synced user or fall back to Stytch user
-      const email = syncedUser?.email || user?.emails?.[0]?.email || '';
-      const firstName = syncedUser?.firstName || user?.name?.first_name || '';
-      const lastName = syncedUser?.lastName || user?.name?.last_name || '';
-      const displayName = syncedUser?.displayName || `${firstName} ${lastName}`.trim() || '';
-      const dbUserId = syncedUser?.userId;
-
-      setUserId(dbUserId);
-      setUserData({
-        userId: dbUserId,
-        email,
-        firstName,
-        lastName,
-        displayName,
-        isActive: syncedUser?.isActive ?? true,
-        isSystemAdmin: syncedUser?.isSystemAdmin ?? false,
-        lastLoginAt: syncedUser?.lastLoginAt
-      });
-    } catch (err) {
-      setError('Failed to initialize profile');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleOpenModal = () => {
     setShowModal(true);
@@ -59,7 +103,7 @@ function UserProfile({ user, syncedUser, onProfileUpdate }) {
       throw new Error('User ID not found. Please refresh the page.');
     }
 
-    await axios.put(`${bffUrl}/api/users/${userId}`, formData);
+    await axios.put(`${bffUrl}/api/users/${userId}`, formData, { withCredentials: true });
 
     // Update local user data with saved values
     setUserData(prev => ({

@@ -8,7 +8,7 @@ WORKDIR /app/shell/admin
 COPY shell/admin/package*.json ./
 
 # Install dependencies
-RUN npm ci
+RUN npm install
 
 # Copy shell-admin source code
 COPY shell/admin/ .

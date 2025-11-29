@@ -1,4 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense, lazy } from 'react';
+
+// Lazy load AvatarUpload from common MFE
+const AvatarUpload = lazy(() => import('commonMfe/AvatarUpload'));
+
+// Content BFF URL for fetching media URLs
+const BFF_CONTENT_URL = import.meta.env.VITE_BFF_CONTENT_URL || 'http://localhost:3240';
 
 /**
  * Unified UserEditor component for both admin user management and user profile editing.
@@ -12,6 +18,7 @@ import { useState, useEffect } from 'react';
  * @param {boolean} props.loading - External loading state
  * @param {string} props.error - External error message
  * @param {string} props.success - External success message
+ * @param {boolean} props.isCurrentUserSystemAdmin - Whether the current user is a system admin (controls access to admin-only fields)
  */
 function UserEditor({
   mode = 'admin',
@@ -21,7 +28,8 @@ function UserEditor({
   isModal = false,
   loading: externalLoading = false,
   error: externalError = null,
-  success: externalSuccess = null
+  success: externalSuccess = null,
+  isCurrentUserSystemAdmin = false
 }) {
   const isEditMode = !!user;
   const isAdminMode = mode === 'admin';
@@ -32,9 +40,11 @@ function UserEditor({
     lastName: '',
     email: '',
     displayName: '',
+    avatarMediaId: null,
     isActive: true,
     isSystemAdmin: false
   });
+  const [avatarUrl, setAvatarUrl] = useState(null);
   const [internalLoading, setInternalLoading] = useState(false);
   const [internalError, setInternalError] = useState(null);
   const [internalSuccess, setInternalSuccess] = useState(false);
@@ -44,16 +54,35 @@ function UserEditor({
   const error = externalError || internalError;
   const success = externalSuccess || internalSuccess;
 
+  // Fetch avatar URL when user has avatarMediaId
   useEffect(() => {
+    const fetchAvatarUrl = async (mediaId) => {
+      try {
+        const response = await fetch(`${BFF_CONTENT_URL}/api/content/media/${mediaId}`);
+        if (response.ok) {
+          const media = await response.json();
+          setAvatarUrl(media.fileUrl);
+        }
+      } catch (err) {
+        console.error('Error fetching avatar URL:', err);
+      }
+    };
+
     if (user) {
       setFormData({
         firstName: user.firstName || '',
         lastName: user.lastName || '',
         email: user.email || '',
         displayName: user.displayName || '',
+        avatarMediaId: user.avatarMediaId || null,
         isActive: user.isActive ?? true,
         isSystemAdmin: user.isSystemAdmin ?? false
       });
+      if (user.avatarMediaId) {
+        fetchAvatarUrl(user.avatarMediaId);
+      } else {
+        setAvatarUrl(null);
+      }
     } else {
       // Reset form for create mode
       setFormData({
@@ -61,9 +90,11 @@ function UserEditor({
         lastName: '',
         email: '',
         displayName: '',
+        avatarMediaId: null,
         isActive: true,
         isSystemAdmin: false
       });
+      setAvatarUrl(null);
     }
     setInternalError(null);
     setInternalSuccess(false);
@@ -94,6 +125,20 @@ function UserEditor({
     setInternalError(null);
   };
 
+  const handleAvatarUploadComplete = (mediaId, fileUrl) => {
+    setFormData(prev => ({ ...prev, avatarMediaId: mediaId }));
+    setAvatarUrl(fileUrl);
+    setInternalSuccess(false);
+    setInternalError(null);
+  };
+
+  const handleAvatarRemove = () => {
+    setFormData(prev => ({ ...prev, avatarMediaId: null }));
+    setAvatarUrl(null);
+    setInternalSuccess(false);
+    setInternalError(null);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setInternalLoading(true);
@@ -108,7 +153,8 @@ function UserEditor({
         firstName: formData.firstName,
         lastName: formData.lastName,
         email: formData.email,
-        displayName: displayName
+        displayName: displayName,
+        avatarMediaId: formData.avatarMediaId
       };
 
       // Only include admin fields if in admin mode
@@ -137,9 +183,20 @@ function UserEditor({
         lastName: user.lastName || '',
         email: user.email || '',
         displayName: user.displayName || '',
+        avatarMediaId: user.avatarMediaId || null,
         isActive: user.isActive ?? true,
         isSystemAdmin: user.isSystemAdmin ?? false
       });
+      // Reset avatar URL - will be re-fetched by useEffect if needed
+      if (user.avatarMediaId) {
+        // Trigger refetch
+        fetch(`${BFF_CONTENT_URL}/api/content/media/${user.avatarMediaId}`)
+          .then(res => res.ok ? res.json() : null)
+          .then(media => media && setAvatarUrl(media.fileUrl))
+          .catch(() => setAvatarUrl(null));
+      } else {
+        setAvatarUrl(null);
+      }
     }
     setInternalError(null);
     setInternalSuccess(false);
@@ -157,29 +214,9 @@ function UserEditor({
     return 'Create a new system user';
   };
 
-  // Modal layout vs inline layout wrapper
-  const FormWrapper = ({ children }) => {
-    if (isModal) {
-      return <>{children}</>;
-    }
-    return (
-      <div className="max-w-2xl mx-auto">
-        <div className="bg-white shadow rounded-lg">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-xl font-semibold text-gray-900">{getTitle()}</h2>
-            <p className="mt-1 text-sm text-gray-500">{getSubtitle()}</p>
-          </div>
-          <div className="px-6 py-6">
-            {children}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  return (
-    <FormWrapper>
-      <form onSubmit={handleSubmit} className="space-y-6">
+  // Form content shared between modal and inline modes
+  const formContent = (
+    <form onSubmit={handleSubmit} className="space-y-6">
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
             {error}
@@ -191,6 +228,25 @@ function UserEditor({
             {isProfileMode ? 'Profile updated successfully!' : 'User saved successfully!'}
           </div>
         )}
+
+        {/* Avatar Upload */}
+        <div className="flex flex-col items-center">
+          <Suspense fallback={
+            <div className="w-24 h-24 rounded-full bg-gray-100 animate-pulse flex items-center justify-center">
+              <span className="text-gray-400 text-xs">Loading...</span>
+            </div>
+          }>
+            <AvatarUpload
+              currentAvatarUrl={avatarUrl}
+              currentMediaId={formData.avatarMediaId}
+              onUploadComplete={handleAvatarUploadComplete}
+              onRemove={handleAvatarRemove}
+              uploadedBy={user?.userId || user?.id}
+              size={96}
+              disabled={loading}
+            />
+          </Suspense>
+        </div>
 
         {/* Name Fields Row */}
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
@@ -270,10 +326,12 @@ function UserEditor({
                 id="isActive"
                 checked={formData.isActive}
                 onChange={handleChange}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                disabled={!isCurrentUserSystemAdmin}
+                className={`h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded ${!isCurrentUserSystemAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
               />
-              <label htmlFor="isActive" className="ml-2 block text-sm text-gray-900">
+              <label htmlFor="isActive" className={`ml-2 block text-sm ${!isCurrentUserSystemAdmin ? 'text-gray-500' : 'text-gray-900'}`}>
                 Active User
+                {!isCurrentUserSystemAdmin && <span className="text-xs text-gray-400 ml-1">(System Admin only)</span>}
               </label>
             </div>
 
@@ -284,10 +342,12 @@ function UserEditor({
                 id="isSystemAdmin"
                 checked={formData.isSystemAdmin}
                 onChange={handleChange}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                disabled={!isCurrentUserSystemAdmin}
+                className={`h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded ${!isCurrentUserSystemAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
               />
-              <label htmlFor="isSystemAdmin" className="ml-2 block text-sm text-gray-900">
+              <label htmlFor="isSystemAdmin" className={`ml-2 block text-sm ${!isCurrentUserSystemAdmin ? 'text-gray-500' : 'text-gray-900'}`}>
                 System Administrator
+                {!isCurrentUserSystemAdmin && <span className="text-xs text-gray-400 ml-1">(System Admin only)</span>}
               </label>
             </div>
           </div>
@@ -341,7 +401,25 @@ function UserEditor({
           </button>
         </div>
       </form>
-    </FormWrapper>
+  );
+
+  // Render based on modal vs inline mode
+  if (isModal) {
+    return formContent;
+  }
+
+  return (
+    <div className="max-w-2xl mx-auto">
+      <div className="bg-white shadow rounded-lg">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-xl font-semibold text-gray-900">{getTitle()}</h2>
+          <p className="mt-1 text-sm text-gray-500">{getSubtitle()}</p>
+        </div>
+        <div className="px-6 py-6">
+          {formContent}
+        </div>
+      </div>
+    </div>
   );
 }
 

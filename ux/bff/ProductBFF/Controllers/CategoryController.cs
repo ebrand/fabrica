@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using ProductBFF.Services;
+using ProductBFF.Middleware;
 using System.Text;
 using System.Text.Json;
 
@@ -18,12 +19,25 @@ public class CategoryController : ControllerBase
         _logger = logger;
     }
 
+    private string? GetTenantId() => HttpContext.Items["TenantId"]?.ToString();
+    private bool IsAllTenantsMode() => HttpContext.IsAllTenantsMode();
+
     [HttpGet]
-    public async Task<IActionResult> GetCategories([FromQuery] Guid? tenantId = null, [FromQuery] Guid? parentId = null)
+    public async Task<IActionResult> GetCategories([FromQuery] Guid? parentId = null, [FromQuery] Guid? tenantId = null)
     {
         try
         {
-            var response = await _productService.GetCategoriesAsync(tenantId, parentId);
+            var contextTenantId = GetTenantId();
+            var isAllTenants = IsAllTenantsMode();
+
+            // Allow "All Tenants" mode for System Admins, otherwise require tenant
+            if (string.IsNullOrEmpty(contextTenantId) && !isAllTenants)
+            {
+                return BadRequest(new { error = "Tenant context required" });
+            }
+
+            // If tenantId filter is explicitly provided (from dropdown), use that
+            var response = await _productService.GetCategoriesAsync(parentId, tenantId);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -69,7 +83,20 @@ public class CategoryController : ControllerBase
     {
         try
         {
-            var content = new StringContent(body.GetRawText(), Encoding.UTF8, "application/json");
+            var tenantId = GetTenantId();
+            if (string.IsNullOrEmpty(tenantId))
+            {
+                return BadRequest(new { error = "Tenant context required" });
+            }
+
+            // Inject tenantId from context
+            var bodyDict = JsonSerializer.Deserialize<Dictionary<string, object>>(body.GetRawText());
+            if (bodyDict != null)
+            {
+                bodyDict["tenantId"] = tenantId;
+            }
+            var modifiedBody = JsonSerializer.Serialize(bodyDict);
+            var content = new StringContent(modifiedBody, Encoding.UTF8, "application/json");
             var response = await _productService.CreateCategoryAsync(content);
 
             if (!response.IsSuccessStatusCode)
@@ -93,7 +120,21 @@ public class CategoryController : ControllerBase
     {
         try
         {
-            var content = new StringContent(body.GetRawText(), Encoding.UTF8, "application/json");
+            var tenantId = GetTenantId();
+            if (string.IsNullOrEmpty(tenantId))
+            {
+                return BadRequest(new { error = "Tenant context required" });
+            }
+
+            // Inject id and tenantId from context
+            var bodyDict = JsonSerializer.Deserialize<Dictionary<string, object>>(body.GetRawText());
+            if (bodyDict != null)
+            {
+                bodyDict["id"] = id.ToString();
+                bodyDict["tenantId"] = tenantId;
+            }
+            var modifiedBody = JsonSerializer.Serialize(bodyDict);
+            var content = new StringContent(modifiedBody, Encoding.UTF8, "application/json");
             var response = await _productService.UpdateCategoryAsync(id, content);
 
             if (!response.IsSuccessStatusCode)
@@ -116,6 +157,12 @@ public class CategoryController : ControllerBase
     {
         try
         {
+            var tenantId = GetTenantId();
+            if (string.IsNullOrEmpty(tenantId))
+            {
+                return BadRequest(new { error = "Tenant context required" });
+            }
+
             var response = await _productService.DeleteCategoryAsync(id);
 
             if (!response.IsSuccessStatusCode)

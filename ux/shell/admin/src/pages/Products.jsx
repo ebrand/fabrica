@@ -1,22 +1,47 @@
-import { lazy, Suspense } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import Layout from '../components/Layout';
+import TenantFilterDropdown from '../components/TenantFilterDropdown';
 
 // Lazy load the Product MFE component
 const ProductManagement = lazy(() => import('productMfe/ProductManagement'));
 
 function Products() {
+  const [filterTenantId, setFilterTenantId] = useState(null);
+
+  const handleTenantFilterChange = (tenantId) => {
+    setFilterTenantId(tenantId);
+  };
+
   return (
     <Layout>
-      {/* Embedded Product MFE via Module Federation */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <Suspense fallback={
-          <div className="flex items-center justify-center p-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-            <p className="ml-4 text-gray-600">Loading product management...</p>
+      <div className="space-y-4">
+        {/* Header with tenant filter */}
+        <div className="flex flex-col gap-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Products</h1>
+              <p className="mt-1 text-sm text-gray-500">
+                Manage your product catalog
+              </p>
+            </div>
           </div>
-        }>
-          <ProductManagement />
-        </Suspense>
+          <TenantFilterDropdown
+            selectedTenantId={filterTenantId}
+            onTenantChange={handleTenantFilterChange}
+          />
+        </div>
+
+        {/* Embedded Product MFE via Module Federation */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <Suspense fallback={
+            <div className="flex items-center justify-center p-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              <p className="ml-4 text-gray-600">Loading product management...</p>
+            </div>
+          }>
+            <ProductManagement filterTenantId={filterTenantId} />
+          </Suspense>
+        </div>
       </div>
     </Layout>
   );

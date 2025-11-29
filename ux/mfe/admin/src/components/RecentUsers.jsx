@@ -15,7 +15,7 @@ function RecentUsers({ limit = 5, onViewAll }) {
     try {
       setLoading(true);
       const url = await configService.getBffAdminUrl();
-      const response = await axios.get(`${url}/api/users`);
+      const response = await axios.get(`${url}/api/users`, { withCredentials: true });
       // Sort by lastLoginAt descending and take the limit
       const sorted = response.data
         .sort((a, b) => {
